@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Optional, Dict, List, Sequence
+from typing import Optional, Dict, Iterable, List, Sequence
 
 import huggingface_hub as hh
 import torch
@@ -228,7 +228,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
     train_dataset = SupervisedDataset(
         tokenizer=tokenizer,
         data_path=data_args.data_path,
-        instruction_key=data_args.insttruction_key,
+        instruction_key=data_args.instruction_key,
         input_key=data_args.input_key,
         output_key=data_args.output_key,
     )
