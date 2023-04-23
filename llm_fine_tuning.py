@@ -3,10 +3,15 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Sequence
+from io import BytesIO, StringIO
+from pathlib import Path
+from typing import Optional, Dict, List, Sequence
 
+import huggingface_hub as hh
 import torch
 import transformers
+import yaml
+from datasets import load_dataset
 from flytekit import Resources
 from torch.utils.data import Dataset
 from transformers import Trainer
@@ -44,6 +49,9 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+    instruction_key: str = "instruction"
+    input_key: str = "input"
+    output_key: str = "output"
 
 
 @dataclass_json
@@ -55,6 +63,20 @@ class TrainingArguments(transformers.TrainingArguments):
         default=512,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
+
+@dataclass_json
+@dataclass
+class HuggingFaceModelCard:
+    language: List[str]
+    license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
+    tags: List[str]
+
+@dataclass_json
+@dataclass
+class PublishArguments:
+    repo_id: str
+    readme: Optional[str] = None
+    model_card: Optional[HuggingFaceModelCard] = None
 
 
 def safe_save_model_for_hf_trainer(trainer: transformers.Trainer, output_dir: str):
@@ -131,16 +153,40 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
+    def __init__(
+        self,
+        data_path: str,
+        tokenizer: transformers.PreTrainedTokenizer,
+        instruction_key: str,
+        input_key: str,
+        output_key: str,
+    ):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        with open(data_path) as f:
-            list_data_dict = json.load(f)
+
+        try:
+            dataset_dict = load_dataset(data_path)
+            dataset = dataset_dict["train"]
+            raw_data = [*dataset]
+        except:
+            with open(data_path) as f:
+                raw_data = json.load(f)
+
+        list_data_dict = [
+            {
+                "instruction": x[instruction_key],
+                "input": x[input_key],
+                "output": x[output_key],
+            }
+            for x in raw_data
+        ]
 
         logging.warning("Formatting inputs...")
         prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
         sources = [
-            prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
+            prompt_input.format_map(example)
+            if example.get("input")
+            else prompt_no_input.format_map(example)
             for example in list_data_dict
         ]
         targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
@@ -179,7 +225,13 @@ class DataCollatorForSupervisedDataset(object):
 
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
+    train_dataset = SupervisedDataset(
+        tokenizer=tokenizer,
+        data_path=data_args.data_path,
+        instruction_key=data_args.insttruction_key,
+        input_key=data_args.input_key,
+        output_key=data_args.output_key,
+    )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
@@ -191,33 +243,34 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
         "WANDB_API_KEY": "<wandb_api_key>",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
     },
-    requests=Resources(mem="40Gi", cpu="1", gpu="1"),
+    requests=Resources(mem="32Gi", cpu="1", gpu="1"),
 )
 def train(
     model_args: ModelArguments,
     data_args: DataArguments,
     training_args: TrainingArguments,
-) -> flytekit.file.FlyteFile:
+) -> flytekit.directory.FlyteDirectory:
     os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
     )
 
-    tokenizer = None
-    for i, use_fast in enumerate([False, True]):
-        try:
-            tokenizer = transformers.AutoTokenizer.from_pretrained(
-                model_args.model_name_or_path,
-                cache_dir=training_args.cache_dir,
-                model_max_length=training_args.model_max_length,
-                padding_side="right",
-                use_fast=use_fast,
-            )
-            break
-        except Exception:
-            if i == 1:
-                raise
+    tokenizer_kwargs = dict(
+        cache_dir=training_args.cache_dir,
+        model_max_length=training_args.model_max_length,
+        padding_side="right",
+    )
+
+    # Try using fast version of the model's tokenizer, if available.
+    try:
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, use_fast=True, **tokenizer_kwargs
+        )
+    except:
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, use_fast=False, **tokenizer_kwargs
+        )
 
     if tokenizer.pad_token is None:
         smart_tokenizer_and_embedding_resize(
@@ -236,10 +289,109 @@ def train(
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    print("training model")
     trainer.train()
     trainer.save_state()
+    print("saving model")
     safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
-    return flytekit.file.FlyteFile(path=training_args.output_dir)
+
+    print("saving arguments for model, data, and training")
+    output_root = Path(training_args.output_dir)
+
+    for args, fn in [
+        (model_args, "model_args.json"),
+        (data_args, "data_args.json"),
+        (training_args, "training_args.json"),
+    ]:
+        with (output_root / fn).open("w") as f:
+            json.dump(args.to_dict(), f)
+
+    print("done")
+    return flytekit.directory.FlyteDirectory(path=training_args.output_dir)
+
+
+MODEL_CARD_TEMPLATE = """
+---
+{model_card_content}
+---
+
+{readme_content}
+""".strip()
+
+
+@flytekit.task(
+    requests=Resources(mem="10Gi", cpu="1"),
+    environment={
+        "HUGGINGFACE_TOKEN": "<huggingface_token>",
+    },
+)
+def save_to_hf_hub(
+    model_dir: flytekit.directory.FlyteDirectory,
+    repo_id: str,
+    model_card: HuggingFaceModelCard,
+    readme: str,
+):
+    # make sure the file can be downloaded
+    model_dir.download()
+    root = Path(model_dir.path)
+
+    hh.login(token=os.environ["HUGGINGFACE_TOKEN"])
+    api = hh.HfApi()
+    api.create_repo(repo_id, exist_ok=True)
+
+    with (root / "data_args.json").open() as f:
+        data_args = json.load(f)
+
+    if readme is not None:
+        StringIO()
+        model_card_dict = model_card.to_dict()
+
+        dataset_path = data_args.get("data_path", None)
+        if dataset_path:
+            model_card_dict["datasets"] = [data_args.get("data_path")]
+
+        readme_str = MODEL_CARD_TEMPLATE.format(
+            model_card_content=yaml.dump(model_card_dict),
+            readme_content=readme,
+        )
+        api.upload_file(
+            path_or_fileobj=BytesIO(readme_str.encode()),
+            path_in_repo="README.md",
+            repo_id=repo_id,
+        )
+
+    for file_name in [
+        "config.json",
+        "pytorch_model.bin",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ]:
+        api.upload_file(
+            path_or_fileobj=root / file_name,
+            path_in_repo=file_name,
+            repo_id=repo_id,
+        )
+
+
+@flytekit.workflow
+def fine_tune(
+    model_args: ModelArguments,
+    data_args: DataArguments,
+    training_args: TrainingArguments,
+    publish_args: PublishArguments,
+):
+    model_dir = train(
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args,
+    )
+    save_to_hf_hub(
+        model_dir=model_dir,
+        repo_id=publish_args.repo_id,
+        model_card=publish_args.model_card,
+        readme=publish_args.readme,
+    )
+
 
 def train_cli():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))

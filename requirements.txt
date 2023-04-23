@@ -1,4 +1,7 @@
+datasets
+huggingface_hub
 numpy
+pyyaml
 rouge_score
 fire
 openai
