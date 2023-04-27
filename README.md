@@ -64,9 +64,11 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
     llm_fine_tuning.py train \
-    --model_args="$(cat config/model_args.json)" \
-    --data_args="$(cat config/data_args.json)" \
-    --training_args="$(cat config/training_args.json)"
+    --model_args "$(cat config/model_args.json)" \
+    --data_args "$(cat config/data_args.json)" \
+    --training_args "$(cat config/training_args.json)" \
+    --fsdp '["full_shard", "offload"]' \
+    --fsdp_config config/fsdp_config.json
 ```
 
 ### Push Fine-tuned Model to Huggingface Hub

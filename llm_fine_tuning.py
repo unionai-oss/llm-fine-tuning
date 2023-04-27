@@ -2,10 +2,10 @@ import copy
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Optional, Dict, Iterable, List, Sequence
+from typing import Optional, Dict, List, Sequence
 
 import huggingface_hub as hh
 import torch
@@ -243,14 +243,34 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
         "WANDB_API_KEY": "<wandb_api_key>",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
     },
-    requests=Resources(mem="32Gi", cpu="1", gpu="1"),
+    requests=Resources(mem="100Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
 )
 def train(
     model_args: ModelArguments,
     data_args: DataArguments,
     training_args: TrainingArguments,
+    fsdp: Optional[List[str]] = None,
+    fsdp_config: Optional[str] = None,
+    ds_config: Optional[str] = None,
 ) -> flytekit.directory.FlyteDirectory:
     os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+
+    if fsdp_config is not None:
+        with open(fsdp_config) as f:
+            fsdp_config = json.load(f)
+
+    if ds_config is not None:
+        with open(ds_config) as f:
+            ds_config = json.load(f)
+
+    training_args = replace(
+        training_args,
+        fp16=True,
+        fsdp=fsdp,
+        fsdp_config=fsdp_config,
+        ds_config=ds_config,
+    )
+
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
