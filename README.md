@@ -38,8 +38,6 @@ flytectl --config $FLYTECTL_CONFIG create project  \
 ```bash
 export FLYTECTL_CONFIG=...
 export REGISTRY=...
-export HUGGINGFACE_USERNAME=...
-export HUGGINGFACE_REPO_NAME=...
 
 # if you created the "llm-fine-tuning" project
 export FLYTE_PROJECT=llm-fine-tuning
@@ -67,8 +65,24 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --model_args "$(cat config/model_args.json)" \
     --data_args "$(cat config/data_args.json)" \
     --training_args "$(cat config/training_args.json)" \
-    --fsdp '["full_shard", "offload"]' \
-    --fsdp_config config/fsdp_config.json
+    --fsdp '["full_shard", "auto_wrap", "offload"]' \
+    --fsdp_config "$(cat config/fsdp_config.json)" \
+    --ds_config '{}'
+```
+
+#### Using DeepSpeed
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG run --remote \
+    --image $REGISTRY/unionai-llm-fine-tuning:latest \
+    --project $FLYTE_PROJECT \
+    llm_fine_tuning.py train \
+    --model_args "$(cat config/model_args.json)" \
+    --data_args "$(cat config/data_args.json)" \
+    --training_args "$(cat config/training_args.json)" \
+    --fsdp '[]' \
+    --fsdp_config '{}' \
+    --ds_config "$(cat config/deepspeed_config.json)"
 ```
 
 ### Push Fine-tuned Model to Huggingface Hub
@@ -78,6 +92,12 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 - In the `train.py` script, replace the `HUGGINGFACE_TOKEN: <huggingface_token>`
   environment variable in the `save_to_hf_hub` task and use your own key.
 
+```bash
+export HUGGINGFACE_USERNAME=...
+export HUGGINGFACE_REPO_NAME=...
+export REMOTE_MODEL_PATH=...
+```
+
 Pushing trained model to huggingface hub:
 
 ```bash
@@ -85,7 +105,7 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
     llm_fine_tuning.py save_to_hf_hub \
-    --model_dir <local_or_remote_path_to_model> \
+    --model_dir $REMOTE_MODEL_PATH \
     --repo_id $HUGGINGFACE_USERNAME/$HUGGINGFACE_REPO_NAME \
     --model_card "$(cat config/model_card.json)" \
     --readme "# My Fine-tuned Model"

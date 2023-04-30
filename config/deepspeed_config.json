@@ -1,5 +1,13 @@
 {
-    "bf16": {
+    "fp16": {
+      "enabled": true,
+      "auto_cast": "auto",
+      "loss_scale": 0,
+      "loss_scale_window": 1000,
+      "hysteresis": 2,
+      "min_loss_scale": 1
+    },
+    "amp": {
       "enabled": "auto"
     },
     "optimizer": {
@@ -10,6 +18,10 @@
         "eps": "auto",
         "weight_decay": "auto"
       }
+    },
+    "offload_optimizer": {
+      "device": "cpu",
+      "pin_memory": true
     },
     "scheduler": {
       "type": "WarmupLR",

@@ -1,11 +1,12 @@
 datasets
+deepspeed>=0.8.3,<0.9
 huggingface_hub
 numpy
 pyyaml
 rouge_score
 fire
 openai
-transformers>=4.26.1
+transformers[torch,deepspeed]>=4.28.1,<5
 tokenizers
 torch
 sentencepiece

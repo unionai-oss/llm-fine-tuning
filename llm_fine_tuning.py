@@ -13,6 +13,13 @@ import transformers
 import yaml
 from datasets import load_dataset
 from flytekit import Resources
+from kubernetes.client.models import (
+    V1PodSpec,
+    V1Container,
+    V1Volume,
+    V1EmptyDirVolumeSource,
+    V1VolumeMount,
+)
 from torch.utils.data import Dataset
 from transformers import Trainer
 
@@ -238,38 +245,53 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
 
 @flytekit.task(
     task_config=Elastic(nnodes=1),
+    pod_template=flytekit.PodTemplate(
+        primary_container_name="llm-fine-tuning-deepspeed",
+        pod_spec=V1PodSpec(
+            containers=[
+                V1Container(
+                    name="llm-fine-tuning-deepspeed",
+                    image="nielsbantilan/unionai-llm-fine-tuning:latest",
+                    volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
+                )
+            ],
+            volumes=[
+                V1Volume(
+                    name="dshm",
+                    empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
+                )
+            ]
+        ),
+    ),
     environment={
         "TRANSFORMERS_CACHE": "/tmp",
         "WANDB_API_KEY": "<wandb_api_key>",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
     },
-    requests=Resources(mem="100Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
 )
 def train(
     model_args: ModelArguments,
     data_args: DataArguments,
     training_args: TrainingArguments,
     fsdp: Optional[List[str]] = None,
-    fsdp_config: Optional[str] = None,
-    ds_config: Optional[str] = None,
+    fsdp_config: Optional[dict] = None,
+    ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
-
-    if fsdp_config is not None:
-        with open(fsdp_config) as f:
-            fsdp_config = json.load(f)
-
-    if ds_config is not None:
-        with open(ds_config) as f:
-            ds_config = json.load(f)
 
     training_args = replace(
         training_args,
         fp16=True,
-        fsdp=fsdp,
-        fsdp_config=fsdp_config,
-        ds_config=ds_config,
+        bf16=False,
     )
+
+    if fsdp:
+        training_args = replace(training_args, fsdp=fsdp)
+    if fsdp_config:
+        training_args = replace(training_args, fsdp_config=fsdp_config)
+    if ds_config:
+        training_args = replace(training_args, deepspeed=ds_config)
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
