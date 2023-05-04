@@ -19,10 +19,6 @@
         "weight_decay": "auto"
       }
     },
-    "offload_optimizer": {
-      "device": "cpu",
-      "pin_memory": true
-    },
     "scheduler": {
       "type": "WarmupLR",
       "params": {

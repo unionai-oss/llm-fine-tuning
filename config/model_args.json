@@ -1,3 +1,3 @@
 {
-    "model_name_or_path": "EleutherAI/pythia-6.9B-deduped"
+    "model_name_or_path": "EleutherAI/pythia-2.8B-deduped"
 }

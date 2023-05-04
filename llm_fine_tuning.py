@@ -263,12 +263,12 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
             ]
         ),
     ),
+    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
     environment={
         "TRANSFORMERS_CACHE": "/tmp",
-        "WANDB_API_KEY": "<wandb_api_key>",
+        "WANDB_API_KEY": "5e15676f31da8b65ad021448fbe7c49172013da2",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
     },
-    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
 )
 def train(
     model_args: ModelArguments,
@@ -421,11 +421,17 @@ def fine_tune(
     data_args: DataArguments,
     training_args: TrainingArguments,
     publish_args: PublishArguments,
+    fsdp: Optional[List[str]] = None,
+    fsdp_config: Optional[dict] = None,
+    ds_config: Optional[dict] = None,
 ):
     model_dir = train(
         model_args=model_args,
         data_args=data_args,
         training_args=training_args,
+        fsdp=fsdp,
+        fsdp_config=fsdp_config,
+        ds_config=ds_config,
     )
     save_to_hf_hub(
         model_dir=model_dir,
