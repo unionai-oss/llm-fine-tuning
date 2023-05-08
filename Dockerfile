@@ -11,14 +11,16 @@ ENV PYTHONPATH /root
 ARG VERSION
 ARG DOCKER_IMAGE
 
-RUN apt-get update && apt-get install build-essential -y
+RUN apt-get update && apt-get install build-essential git -y
 
-COPY . /root
-
+COPY ./requirements.txt /root/requirements.txt
 WORKDIR /root
 
 # Pod tasks should be exposed in the default image
-RUN DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed
 RUN pip install -r requirements.txt
+RUN DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed --force-reinstall
+
+COPY . /root
+WORKDIR /root
 
 ENV FLYTE_INTERNAL_IMAGE "$DOCKER_IMAGE"

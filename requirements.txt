@@ -1,4 +1,5 @@
-acceelerate
+accelerate
+bitsandbytes==0.37.2  # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
 datasets
 deepspeed>=0.8.3,<0.9
 huggingface_hub

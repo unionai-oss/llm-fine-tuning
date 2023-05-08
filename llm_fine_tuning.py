@@ -266,7 +266,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
     requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
     environment={
         "TRANSFORMERS_CACHE": "/tmp",
-        "WANDB_API_KEY": "5e15676f31da8b65ad021448fbe7c49172013da2",
+        "WANDB_API_KEY": "9cd30cd84809e874a8f06014b60e10ba9b5646ff",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
     },
 )

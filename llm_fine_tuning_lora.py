@@ -2,12 +2,14 @@ import json
 import os
 import os.path as osp
 import sys
-from typing import List, Union
+from typing import List, Optional, Union
 
 import fire
 import flytekit
 import torch
+import torch.nn as nn
 import transformers
+from transformers.utils import logging
 
 from datasets import load_dataset
 from flytekit import Resources
@@ -35,6 +37,9 @@ from peft import (
 )
 from transformers import LlamaForCausalLM, LlamaTokenizer
 
+
+logging.set_verbosity_debug()
+logger = logging.get_logger("transformers")
 
 class Prompter(object):
     __slots__ = ("template", "_verbose")
@@ -78,6 +83,23 @@ class Prompter(object):
 
     def get_response(self, output: str) -> str:
         return output.split(self.template["response_split"])[1].strip()
+    
+
+def custom_prepare_model_for_int8_training(model: nn.Module):
+    for param in model.parameters():
+        param.requires_grad = False  # freeze the model - train adapters later
+        if param.ndim == 1:
+            # cast the small parameters (e.g. layernorm) to fp32 for stability
+            param.data = param.data.to(torch.float32)
+
+        model.gradient_checkpointing_enable()  # reduce number of stored activations
+        model.enable_input_require_grads()
+
+    class CastOutputToFloat(nn.Sequential):
+        def forward(self, x): return super().forward(x).to(torch.float32)
+
+    model.lm_head = CastOutputToFloat(model.lm_head)
+    return model
 
 
 @flytekit.task(
@@ -100,12 +122,14 @@ class Prompter(object):
             ]
         ),
     ),
-    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     environment={
         "TRANSFORMERS_CACHE": "/tmp",
-        "WANDB_API_KEY": "5e15676f31da8b65ad021448fbe7c49172013da2",
+        "WANDB_API_KEY": "9cd30cd84809e874a8f06014b60e10ba9b5646ff",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
+        "CUDA_LAUNCH_BLOCKING": "1",
     },
+    retries=0,
 )
 def train(
     # model/data params
@@ -119,6 +143,7 @@ def train(
     learning_rate: float = 3e-4,
     cutoff_len: int = 256,
     val_set_size: int = 0,
+    save_steps: int = 200,
     # lora hyperparams
     lora_r: int = 8,
     lora_alpha: int = 16,
@@ -138,7 +163,8 @@ def train(
     wandb_log_model: str = "",  # options: false | true
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
     prompt_template_name: str = "alpaca",  # The prompt template to use, will default to alpaca.
-):
+    ds_config: Optional[dict] = None,
+) -> flytekit.directory.FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         print(
             f"Training Alpaca-LoRA model with params:\n"
@@ -168,6 +194,10 @@ def train(
     assert (
         base_model
     ), "Please specify a --base_model, e.g. --base_model='huggyllama/llama-7b'"
+
+    wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+    os.environ["WANDB_RUN_ID"] = wandb_run_name
+
     gradient_accumulation_steps = batch_size // micro_batch_size
 
     prompter = Prompter(prompt_template_name)
@@ -253,7 +283,7 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    model = prepare_model_for_int8_training(model)
+    model = custom_prepare_model_for_int8_training(model)
 
     config = LoraConfig(
         r=lora_r,
@@ -270,6 +300,7 @@ def train(
     else:
         data = load_dataset(data_path)
 
+    resume_from_checkpoint = None
     if resume_from_checkpoint:
         # Check the available weights and load them
         checkpoint_name = os.path.join(
@@ -322,25 +353,27 @@ def train(
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             fp16=True,
+            half_precision_backend="auto",
             logging_steps=10,
             optim="adamw_torch",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=200 if val_set_size > 0 else None,
-            save_steps=200,
+            save_steps=save_steps,
             output_dir=output_dir,
-            save_total_limit=3,
+            save_total_limit=1,
             load_best_model_at_end=True if val_set_size > 0 else False,
             ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
+            # deepspeed=({} if ds_config is None else ds_config),
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
     )
-    model.config.use_cache = False
+    # model.config.use_cache = False
 
     old_state_dict = model.state_dict
     model.state_dict = (
@@ -352,6 +385,7 @@ def train(
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
+    logger.info("Starting training run")
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
@@ -359,6 +393,7 @@ def train(
     print(
         "\n If there's a warning about missing keys above, please disregard :)"
     )
+    return flytekit.directory.FlyteDirectory(path=output_dir)
 
 
 if __name__ == "__main__":
