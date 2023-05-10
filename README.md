@@ -96,16 +96,16 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
     llm_fine_tuning_lora.py train \
-    --base_model "huggyllama/llama-7b" \
+    --base_model "huggyllama/llama-13b" \
     --data_path "yahma/alpaca-cleaned" \
     --output_dir "./tmp" \
-    --batch_size 8 \
+    --batch_size 16 \
     --micro_batch_size 1 \
     --num_epochs 1 \
     --learning_rate 1e-4 \
     --cutoff_len 512 \
-    --save_steps 30 \
-    --lora_r 1 \
+    --save_steps 50 \
+    --lora_r 8 \
     --lora_alpha 16 \
     --lora_dropout 0.05 \
     --lora_target_modules '["q_proj", "v_proj"]' \

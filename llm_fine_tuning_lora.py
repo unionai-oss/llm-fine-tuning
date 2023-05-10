@@ -354,8 +354,8 @@ def train(
             learning_rate=learning_rate,
             fp16=True,
             half_precision_backend="auto",
-            logging_steps=10,
-            optim="adamw_torch",
+            logging_steps=20,
+            optim="adamw_bnb_8bit",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=200 if val_set_size > 0 else None,
@@ -367,7 +367,7 @@ def train(
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
-            # deepspeed=({} if ds_config is None else ds_config),
+            deepspeed=({} if ds_config is None else ds_config),
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
