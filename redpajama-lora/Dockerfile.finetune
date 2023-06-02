@@ -1,0 +1,15 @@
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel
+
+WORKDIR /root
+ENV VENV /opt/venv
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+ENV PYTHONPATH /root
+
+RUN apt-get update && apt-get install build-essential git -y
+
+COPY requirements_finetune.txt /root/requirements.txt
+WORKDIR /root
+
+RUN pip install -r /root/requirements.txt
+

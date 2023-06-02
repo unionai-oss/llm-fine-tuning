@@ -1,0 +1,8 @@
+transformers
+peft
+datasets
+flytekit
+accelerate
+bitsandbytes==0.37.2 # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
+flytekitplugins-kfpytorch
+wandb
