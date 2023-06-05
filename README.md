@@ -67,7 +67,7 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --model_args "$(cat config/model_args.json)" \
     --data_args "$(cat config/data_args.json)" \
     --training_args "$(cat config/training_args.json)" \
-    --fsdp '["full_shard", "auto_wrap", "offload"]' \
+    --fsdp '["full_shard", "auto_wrap"]' \
     --fsdp_config "$(cat config/fsdp_config.json)" \
     --ds_config '{}'
 ```

@@ -122,12 +122,11 @@ def custom_prepare_model_for_int8_training(model: nn.Module):
             ]
         ),
     ),
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="100Gi", cpu="50", gpu="5", ephemeral_storage="100Gi"),
     environment={
         "TRANSFORMERS_CACHE": "/tmp",
-        "WANDB_API_KEY": "9cd30cd84809e874a8f06014b60e10ba9b5646ff",
+        "WANDB_API_KEY": "...",
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
-        "CUDA_LAUNCH_BLOCKING": "1",
     },
     retries=0,
 )
@@ -163,7 +162,6 @@ def train(
     wandb_log_model: str = "",  # options: false | true
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
     prompt_template_name: str = "alpaca",  # The prompt template to use, will default to alpaca.
-    ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         print(
@@ -367,13 +365,11 @@ def train(
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
-            deepspeed=({} if ds_config is None else ds_config),
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
     )
-    # model.config.use_cache = False
 
     old_state_dict = model.state_dict
     model.state_dict = (
