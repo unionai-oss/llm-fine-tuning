@@ -13,6 +13,8 @@ from flytekit.types.file import FlyteFile
 
 SECRET_GROUP = "hf"
 SECRET_NAME = "hf-token"
+SECRET_GROUP_OPENAI = "openai"
+SECRET_NAME_OPENAI = "api-key"
 
 
 @task
@@ -44,7 +46,10 @@ You are a helpful slack bot. You provide answers to user questions on Slack. Giv
 {output}
     """
     print(prompt)
-    openai.api_key = "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"
+    OPENAI_API_KEY = flytekit.current_context().secrets.get(
+        SECRET_GROUP_OPENAI, SECRET_NAME_OPENAI
+    )
+    openai.api_key = OPENAI_API_KEY
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
@@ -62,7 +67,10 @@ Given a list of Slack threads, select threads that have well-formatted inputs an
 {input}
     """
     print(prompt)
-    openai.api_key = "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"
+    OPENAI_API_KEY = flytekit.current_context().secrets.get(
+        SECRET_GROUP_OPENAI, SECRET_NAME_OPENAI
+    )
+    openai.api_key = OPENAI_API_KEY
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
@@ -71,7 +79,16 @@ Given a list of Slack threads, select threads that have well-formatted inputs an
     return response.choices[0].message["content"]
 
 
-@task(requests=Resources(gpu="1", mem="50Gi", cpu="10"))
+@task(
+    requests=Resources(gpu="1", mem="50Gi", cpu="10"),
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP_OPENAI,
+            key=SECRET_NAME_OPENAI,
+            mount_requirement=Secret.MountType.FILE,
+        )
+    ],
+)
 def question_response_pairs(channel_dir: str) -> Optional[FlyteFile]:
     threads = []
     thread_ts_list_index_pairs = {}
