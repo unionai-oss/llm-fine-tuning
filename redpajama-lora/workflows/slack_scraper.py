@@ -155,7 +155,7 @@ def merge_json_files(json_files):
 def push_to_hub(json_files: List[Optional[FlyteFile]]):
     HF_TOKEN = flytekit.current_context().secrets.get(SECRET_GROUP, SECRET_NAME)
     dataset = load_dataset("json", data_files=merge_json_files(json_files))
-    dataset.push_to_hub("Samhita/slack-data-long-responses", token=HF_TOKEN)
+    dataset.push_to_hub("Samhita/flyte-slack-data", token=HF_TOKEN)
 
 
 @workflow
