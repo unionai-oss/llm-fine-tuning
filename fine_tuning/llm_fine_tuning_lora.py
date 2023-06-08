@@ -1,0 +1,428 @@
+import os
+import sys
+from functools import partial
+from typing import List, Optional, Union
+
+from dataclasses import dataclass, field
+from dataclasses_json import dataclass_json
+
+import flytekit
+import torch
+import torch.nn as nn
+import transformers
+from flytekit import Secret
+from transformers import (
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+    TrainingArguments,
+)
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.utils import logging
+
+from datasets import load_dataset
+from flytekit import Resources
+from flytekitplugins.kfpytorch.task import Elastic
+from kubernetes.client.models import (
+    V1PodSpec,
+    V1Container,
+    V1Volume,
+    V1EmptyDirVolumeSource,
+    V1VolumeMount,
+)
+
+"""
+Unused imports:
+import torch.nn as nn
+import bitsandbytes as bnb
+"""
+
+from peft import (
+    LoraConfig,
+    get_peft_model,
+    get_peft_model_state_dict,
+    set_peft_model_state_dict,
+)
+from transformers import LlamaForCausalLM, LlamaTokenizer
+
+
+logging.set_verbosity_debug()
+logger = logging.get_logger("transformers")
+
+
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+
+TEMPLATE = {
+    "description": "Template used by Alpaca-LoRA.",
+    "prompt_input": (
+        "Below is an instruction that describes a task, paired with an input that "
+        "provides further context. Write a response that appropriately completes "
+        "the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n"
+    ),
+    "prompt_no_input": (
+        "Below is an instruction that describes a task. Write a response that "
+        "appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
+    ),
+    "response_split": "### Response:"    
+}
+
+
+@dataclass_json
+@dataclass
+class TrainerConfig:
+    base_model: str = "togethercomputer/RedPajama-INCITE-Chat-7B-v0.1"
+    data_path: str = "yahma/alpaca-cleaned"
+    instruction_key: str = "instruction"
+    input_key: str = "input"
+    output_key: str = "output"
+    output_dir: str = "./output"
+    device_map: str = "auto"
+    batch_size: int = 128
+    micro_batch_size: int = 4
+    num_epochs: int = 3
+    learning_rate: float = 3e-4
+    cutoff_len: int = 256
+    val_set_size: int = 2000
+    lora_r: int = 8
+    lora_alpha: int = 16
+    lora_dropout: float = 0.05
+    lora_target_modules: List[str] = field(default_factory=lambda: ["query_key_value"])
+    train_on_inputs: bool = True
+    add_eos_token: bool = True
+    group_by_length: bool = False
+    resume_from_checkpoint: Optional[str] = None
+    wandb_project: str = "unionai-llm-fine-tuning"
+    wandb_run_name: str = ""
+    wandb_watch: str = ""  # options: false | gradients | all
+    wandb_log_model: str = ""  # options: false | true
+    debug_mode: bool = False
+    debug_train_data_size: int = 1024
+
+
+class SavePeftModelCallback(TrainerCallback):
+    def on_save(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs,
+    ):
+        checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+        peft_model_path = os.path.join(checkpoint_folder, "adapter_model")
+        kwargs["model"].save_pretrained(peft_model_path)
+
+        pytorch_model_path = os.path.join(checkpoint_folder, "pytorch_model.bin")
+        if int(os.environ.get("LOCAL_RANK")) == 0:
+            if os.path.exists(pytorch_model_path):
+                os.remove(pytorch_model_path)
+        return control
+
+
+class Prompter(object):
+    __slots__ = ("template")
+
+    def __init__(self, template: Optional[dict] = None):
+        self.template = template or TEMPLATE
+
+    def generate_prompt(
+        self,
+        instruction: str,
+        input: Union[None, str] = None,
+        label: Union[None, str] = None,
+    ) -> str:
+        # returns the full prompt from instruction and optional input
+        # if a label (response, output) is provided, it's also appended.
+        if input:
+            res = self.template["prompt_input"].format(
+                instruction=instruction, input=input
+            )
+        else:
+            res = self.template["prompt_no_input"].format(
+                instruction=instruction
+            )
+        if label:
+            res = f"{res}{label}"
+        return res
+
+    def get_response(self, output: str) -> str:
+        return output.split(self.template["response_split"])[1].strip()
+
+
+def tokenize(tokenizer, config: TrainerConfig, prompt):
+    # there's probably a way to do this with the tokenizer settings
+    # but again, gotta move fast
+    result = tokenizer(
+        prompt,
+        truncation=True,
+        max_length=config.cutoff_len,
+        padding=False,
+        return_tensors=None,
+    )
+    if (
+        result["input_ids"][-1] != tokenizer.eos_token_id
+        and len(result["input_ids"]) < config.cutoff_len
+        and config.add_eos_token
+    ):
+        result["input_ids"].append(tokenizer.eos_token_id)
+        result["attention_mask"].append(1)
+
+    result["labels"] = result["input_ids"].copy()
+
+    return result
+
+
+def generate_and_tokenize_prompt(data_point, config, tokenizer):
+    prompter = Prompter()
+    full_prompt = prompter.generate_prompt(
+        data_point["instruction"],
+        data_point["input"],
+        data_point["output"],
+    )
+    tokenized_full_prompt = tokenize(tokenizer, config, full_prompt)
+    if not config.train_on_inputs:
+        user_prompt = prompter.generate_prompt(
+            data_point["instruction"], data_point["input"]
+        )
+        tokenized_user_prompt = tokenize(
+            user_prompt, add_eos_token=config.add_eos_token
+        )
+        user_prompt_len = len(tokenized_user_prompt["input_ids"])
+
+        if config.add_eos_token:
+            user_prompt_len -= 1
+
+        tokenized_full_prompt["labels"] = [
+            -100
+        ] * user_prompt_len + tokenized_full_prompt["labels"][
+            user_prompt_len:
+        ]  # could be sped up, probably
+    return tokenized_full_prompt
+    
+
+def prepare_model_for_int8_training(model: nn.Module):
+    for param in model.parameters():
+        param.requires_grad = False  # freeze the model - train adapters later
+        if param.ndim == 1:
+            # cast the small parameters (e.g. layernorm) to fp32 for stability
+            param.data = param.data.to(torch.float32)
+
+        model.gradient_checkpointing_enable()  # reduce number of stored activations
+        model.enable_input_require_grads()
+
+    class CastOutputToFloat(nn.Sequential):
+        def forward(self, x): return super().forward(x).to(torch.float32)
+
+    model.lm_head = CastOutputToFloat(model.lm_head)
+    return model
+
+
+finetuning_image_spec = flytekit.ImageSpec(
+    base_image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel",
+    name="unionai-llm-fine-tuning",
+    python_version="3.10",
+    apt_packages=["git"],
+    env={
+        "DS_BUILD_OPS": "1",
+        "DS_BUILD_AIO": "0",
+        "DS_BUILD_SPARSE_ATTN": "0",
+    },
+    packages=[
+        "accelerate",
+        # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
+        "'bitsandbytes==0.37.2'",
+        "datasets",
+        "'deepspeed>=0.8.3,<0.9'",
+        "huggingface_hub",
+        "loralib",
+        "numpy",
+        "pyyaml",
+        "rouge_score",
+        "fire",
+        "openai",
+        "'transformers[torch,deepspeed]>=4.28.1,<5'",
+        "tokenizers",
+        "torch",
+        "sentencepiece",
+        "wandb",
+        "flytekit",
+        "flytekitplugins-kfpytorch",
+        "'git+https://github.com/huggingface/peft.git'",
+    ],
+    registry="ghcr.io/unionai-oss",
+)
+
+
+@flytekit.task(
+    task_config=Elastic(nnodes=1),
+    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
+    container_image=finetuning_image_spec,
+    pod_template=flytekit.PodTemplate(
+        primary_container_name="unionai-llm-fine-tuning",
+        pod_spec=V1PodSpec(
+            containers=[
+                V1Container(
+                    name="unionai-llm-fine-tuning",
+                    volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
+                )
+            ],
+            volumes=[
+                V1Volume(
+                    name="dshm",
+                    empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
+                )
+            ]
+        ),
+    ),
+    environment={
+        "WANDB_PROJECT": "unionai-llm-fine-tuning",
+        "TRANSFORMERS_CACHE": "/tmp",
+    },
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=WANDB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        )
+    ],
+)
+def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        print(f"Training Alpaca-LoRA model with params:\n{config}")
+
+    os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
+        SECRET_GROUP, WANDB_API_SECRET_KEY
+    )
+    wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+    os.environ["WANDB_RUN_ID"] = wandb_run_name
+
+    gradient_accumulation_steps = config.batch_size // config.micro_batch_size
+    device_map = config.device_map
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    ddp = world_size != 1
+    if ddp:
+        device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
+        gradient_accumulation_steps = gradient_accumulation_steps // world_size
+
+    # Check if parameter passed or if set within environ
+    use_wandb = len(config.wandb_project) > 0 or (
+        "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
+    )
+
+    # Only overwrite environ if wandb param passed
+    if len(config.wandb_project) > 0:
+        os.environ["WANDB_PROJECT"] = config.wandb_project
+    if len(config.wandb_watch) > 0:
+        os.environ["WANDB_WATCH"] = config.wandb_watch
+    if len(config.wandb_log_model) > 0:
+        os.environ["WANDB_LOG_MODEL"] = config.wandb_log_model
+
+    model = LlamaForCausalLM.from_pretrained(
+        config.base_model,
+        load_in_8bit=True,
+        torch_dtype=torch.float16,
+        device_map=device_map,
+    )
+
+    tokenizer = LlamaTokenizer.from_pretrained(config.base_model)
+    tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
+    tokenizer.padding_side = "left"  # Allow batched inference
+
+    model = prepare_model_for_int8_training(model)
+
+    config = LoraConfig(
+        r=config.lora_r,
+        lora_alpha=config.lora_alpha,
+        target_modules=config.lora_target_modules,
+        lora_dropout=config.lora_dropout,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, config)
+
+    if config.data_path.endswith(".json") or config.data_path.endswith(".jsonl"):
+        data = load_dataset("json", data_files=config.data_path)
+    else:
+        data = load_dataset(config.data_path)
+
+    if config.resume_from_checkpoint:
+
+        # Check the available weights and load them
+        checkpoint_name = os.path.join(config.resume_from_checkpoint, "pytorch_model.bin")  # Full checkpoint
+        if not os.path.exists(checkpoint_name):
+            checkpoint_name = os.path.join(config.resume_from_checkpoint, "adapter_model.bin")
+            config.resume_from_checkpoint = False  # So the trainer won't try loading its state
+
+        # The two files above have a different name depending on how they were saved, but are actually the same.
+        if os.path.exists(checkpoint_name):
+            print(f"Restarting from {checkpoint_name}")
+            adapters_weights = torch.load(checkpoint_name)
+            set_peft_model_state_dict(model, adapters_weights)
+        else:
+            print(f"Checkpoint {checkpoint_name} not found")
+
+    model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
+
+    generate_and_tokenize = partial(
+        generate_and_tokenize_prompt,
+        config=config,
+        tokenizer=tokenizer,
+    )
+    if config.val_set_size > 0:
+        train_val = data["train"].train_test_split(test_size=config.val_set_size, shuffle=True, seed=42)
+        train_data = train_val["train"].shuffle().map(generate_and_tokenize)
+        val_data = train_val["test"].shuffle().map(generate_and_tokenize)
+    else:
+        train_data = data["train"].shuffle().map(generate_and_tokenize)
+        val_data = None
+
+    if not ddp and torch.cuda.device_count() > 1:
+        # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
+        model.is_parallelizable = True
+        model.model_parallel = True
+
+    trainer = transformers.Trainer(
+        model=model,
+        train_dataset=train_data,
+        eval_dataset=val_data,
+        args=transformers.TrainingArguments(
+            per_device_train_batch_size=config.micro_batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            warmup_steps=100,
+            num_train_epochs=config.num_epochs,
+            learning_rate=config.learning_rate,
+            fp16=True,
+            half_precision_backend="auto",
+            logging_steps=20,
+            optim="adamw_bnb_8bit",
+            evaluation_strategy="steps" if config.val_set_size > 0 else "no",
+            save_strategy="steps",
+            eval_steps=200 if config.val_set_size > 0 else None,
+            save_steps=config.save_steps,
+            output_dir=config.output_dir,
+            save_total_limit=1,
+            load_best_model_at_end=True if config.val_set_size > 0 else False,
+            ddp_find_unused_parameters=False if ddp else None,
+            group_by_length=config.group_by_length,
+            report_to="wandb" if use_wandb else None,
+            run_name=wandb_run_name if use_wandb else None,
+        ),
+        data_collator=transformers.DataCollatorForSeq2Seq(
+            tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
+        ),
+        callbacks=[SavePeftModelCallback],
+    )
+
+    old_state_dict = model.state_dict
+    model.state_dict = (
+        lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
+    ).__get__(model, type(model))
+
+    if torch.__version__ >= "2" and sys.platform != "win32":
+        model = torch.compile(model)
+
+    logger.info("Starting training run")
+    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint)
+
+    model.save_pretrained(config.output_dir)
+    return flytekit.directory.FlyteDirectory(path=config.output_dir)

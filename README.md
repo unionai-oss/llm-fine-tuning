@@ -11,16 +11,29 @@ source ~/venvs/llm-fine-tuning/bin/activate
 pip install -r requirements.txt
 ```
 
+### Set Environment Variables
+
+```bash
+export PYTHONPATH=$(pwd):$PYTHONPATH
+export FLYTECTL_CONFIG=...
+export REGISTRY=ghcr.io/unionai-oss
+export FLYTE_SDK_LOGGING_LEVEL=100
+
+# if you created the "llm-fine-tuning" project
+export FLYTE_PROJECT=llm-fine-tuning
+```
+
 ## Container Build
 
 ```bash
-docker build . -t <registry>/unionai-llm-fine-tuning:latest
-docker push <registry>/unionai-llm-fine-tuning:latest
+docker login ghcr.io
+docker build . -t $REGISTRY/unionai-llm-fine-tuning:latest
+docker push $REGISTRY/unionai-llm-fine-tuning:latest
 ```
 
 ## Run on Flyte
 
-### Create Project (Optional)
+### Create Project
 
 First, [install flytectl](https://docs.flyte.org/projects/flytectl/en/latest/).
 
@@ -31,19 +44,6 @@ flytectl --config $FLYTECTL_CONFIG create project  \
   --id "llm-fine-tuning" \
   --description "Fine-tuning for LLMs" \
   --name "llm-fine-tuning"
-```
-
-### Set Environment Variables
-
-```bash
-export FLYTECTL_CONFIG=...
-export REGISTRY=...
-
-# if you created the "llm-fine-tuning" project
-export FLYTE_PROJECT=llm-fine-tuning
-
-# otherwise default to flytesnacks
-export FLYTE_PROJECT=flytesnacks
 ```
 
 ### Full Fine-tuning
@@ -61,14 +61,10 @@ To run on flyte:
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
-    llm_fine_tuning.py train \
-    --model_args "$(cat config/model_args.json)" \
-    --data_args "$(cat config/data_args.json)" \
-    --training_args "$(cat config/training_args.json)" \
-    --fsdp '["full_shard", "auto_wrap"]' \
-    --fsdp_config "$(cat config/fsdp_config.json)" \
+    fine_tuning/llm_fine_tuning.py train \
+    --config config/training_config.json \
+    --fsdp_config config/zero_config_fsdp.json \
     --ds_config '{}'
 ```
 
@@ -78,13 +74,10 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
-    llm_fine_tuning.py train \
-    --model_args "$(cat config/model_args.json)" \
-    --data_args "$(cat config/data_args.json)" \
-    --training_args "$(cat config/training_args.json)" \
-    --fsdp '[]' \
-    --fsdp_config '{}' \
-    --ds_config "$(cat config/deepspeed_config.json)"
+    fine_tuning/llm_fine_tuning.py train \
+    --config config/training_config.json \
+    --ds_config config/zero_config_ds.json \
+    --fsdp_config '{}'
 ```
 
 ### Fine-tuning with LoRA
@@ -95,24 +88,8 @@ The following instructions are for fine-tuning using [LoRA](https://arxiv.org/ab
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --image $REGISTRY/unionai-llm-fine-tuning:latest \
     --project $FLYTE_PROJECT \
-    llm_fine_tuning_lora.py train \
-    --base_model "huggyllama/llama-13b" \
-    --data_path "yahma/alpaca-cleaned" \
-    --output_dir "./tmp" \
-    --batch_size 16 \
-    --micro_batch_size 1 \
-    --num_epochs 1 \
-    --learning_rate 1e-4 \
-    --cutoff_len 512 \
-    --save_steps 50 \
-    --lora_r 8 \
-    --lora_alpha 16 \
-    --lora_dropout 0.05 \
-    --lora_target_modules '["q_proj", "v_proj"]' \
-    --train_on_inputs \
-    --group_by_length \
-    --resume_from_checkpoint "" \
-    --ds_config "$(cat config/deepspeed_config.json)"
+    fine_tuning/llm_fine_tuning_lora.py train \
+    --config config/training_config_lora.json
 ```
 
 ### Push Fine-tuned Model to Huggingface Hub

@@ -279,7 +279,8 @@ def redpajama_finetune(config: TrainerConfig) -> FlyteDirectory:
         else DatasetDict(
             {
                 "train": load_dataset(
-                    config.data_path, split=f"train[:{config.debug_train_data_size}]"
+                    config.data_path,
+                    split=f"train[:{config.debug_train_data_size}]"
                 )
             }
         )

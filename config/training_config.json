@@ -1,0 +1,8 @@
+{
+    "num_epochs": 1,
+    "max_steps": 100,
+    "batch_size": 8,
+    "micro_batch_size": 1,
+    "model_name_or_path": "EleutherAI/pythia-1B-deduped",
+    "data_path":"yahma/alpaca-cleaned"
+}

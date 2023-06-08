@@ -1,0 +1,12 @@
+{
+    "fsdp": ["full_shard", "auto_wrap"],
+    "fsdp_config": {
+        "fsdp_transformer_layer_cls_to_wrap": [
+            "GPTNeoXForCausalLM",
+            "GPTNeoXModel",
+            "GPTNeoXLayer",
+            "GPTNeoXMLP",
+            "GPTNeoXAttention"
+        ]
+    }
+}

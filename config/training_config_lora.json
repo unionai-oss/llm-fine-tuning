@@ -1,0 +1,18 @@
+{
+    "num_epochs": 1,
+    "max_steps": 100,
+    "batch_size": 16,
+    "micro_batch_size": 1,
+    "model_name_or_path": "togethercomputer/RedPajama-INCITE-7B-Chat",
+    "data_path":"yahma/alpaca-cleaned",
+    "learning_rate": 1e-4,
+    "cutoff_len": 512,
+    "save_steps": 50,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "lora_target_modules": ["query_key_value"],
+    "train_on_inputs": true,
+    "group_by_length": true,
+    "resume_from_checkpoint": ""
+}
