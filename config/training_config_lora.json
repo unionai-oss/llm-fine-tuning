@@ -1,6 +1,6 @@
 {
     "num_epochs": 1,
-    "max_steps": 100,
+    "max_steps": -1,
     "batch_size": 16,
     "micro_batch_size": 1,
     "model_name_or_path": "togethercomputer/RedPajama-INCITE-7B-Chat",
@@ -14,5 +14,5 @@
     "lora_target_modules": ["query_key_value"],
     "train_on_inputs": true,
     "group_by_length": true,
-    "resume_from_checkpoint": ""
+    "resume_from_checkpoint": null
 }

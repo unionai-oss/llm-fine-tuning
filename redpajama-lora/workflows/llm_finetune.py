@@ -188,31 +188,7 @@ class TokenizerHelper:
 )
 def redpajama_finetune(config: TrainerConfig) -> FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-        print(
-            f"\n\n\nLoRA fine-tuning model with params:\n"
-            f"base_model: {config.base_model}\n"
-            f"data_path: {config.data_path}\n"
-            f"output_dir: {config.output_dir}\n"
-            f"batch_size: {config.batch_size}\n"
-            f"micro_batch_size: {config.micro_batch_size}\n"
-            f"num_epochs: {config.num_epochs}\n"
-            f"learning_rate: {config.learning_rate}\n"
-            f"cutoff_len: {config.cutoff_len}\n"
-            f"val_set_size: {config.val_set_size}\n"
-            f"lora_r: {config.lora_r}\n"
-            f"lora_alpha: {config.lora_alpha}\n"
-            f"lora_dropout: {config.lora_dropout}\n"
-            f"lora_target_modules: {config.lora_target_modules}\n"
-            f"train_on_inputs: {config.train_on_inputs}\n"
-            f"add_eos_token: {config.add_eos_token}\n"
-            f"group_by_length: {config.group_by_length}\n"
-            f"resume_from_checkpoint: {config.resume_from_checkpoint or False}\n"
-            f"wandb_project: {config.wandb_project}\n"
-            f"wandb_run_name: {config.wandb_run_name}\n"
-            f"wandb_watch: {config.wandb_watch}\n"
-            f"wandb_log_model: {config.wandb_log_model}\n"
-            f"debug_mode: {config.debug_mode}\n"
-        )
+        print(f"\n\n\nLoRA fine-tuning model with params:\n{config}")
     assert (
         config.base_model
     ), "Please specify a --base_model, e.g. --base_model='huggyllama/llama-7b'"

@@ -312,7 +312,7 @@ finetuning_image_spec = flytekit.ImageSpec(
 
 @flytekit.task(
     task_config=Elastic(nnodes=1),
-    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=finetuning_image_spec,
     pod_template=flytekit.PodTemplate(
         primary_container_name="unionai-llm-fine-tuning",
