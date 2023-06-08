@@ -172,8 +172,7 @@ def tokenize(tokenizer, config: TrainerConfig, prompt):
     return result
 
 
-def generate_and_tokenize_prompt(data_point, config, tokenizer):
-    prompter = Prompter()
+def generate_and_tokenize_prompt(data_point, config, tokenizer, prompter):
     full_prompt = prompter.generate_prompt(
         data_point["instruction"],
         data_point["input"],
@@ -330,7 +329,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
 
     model = prepare_model_for_int8_training(model)
 
-    config = LoraConfig(
+    lora_config = LoraConfig(
         r=config.lora_r,
         lora_alpha=config.lora_alpha,
         target_modules=config.lora_target_modules,
@@ -338,7 +337,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         bias="none",
         task_type="CAUSAL_LM",
     )
-    model = get_peft_model(model, config)
+    model = get_peft_model(model, lora_config)
 
     if config.data_path.endswith(".json") or config.data_path.endswith(".jsonl"):
         data = load_dataset("json", data_files=config.data_path)
@@ -363,10 +362,12 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
 
     model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
 
+    prompter = Prompter()
     generate_and_tokenize = partial(
         generate_and_tokenize_prompt,
         config=config,
         tokenizer=tokenizer,
+        prompter=prompter,
     )
     if config.val_set_size > 0:
         train_val = data["train"].train_test_split(test_size=config.val_set_size, shuffle=True, seed=42)
