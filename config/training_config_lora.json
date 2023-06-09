@@ -11,8 +11,10 @@
     "lora_r": 8,
     "lora_alpha": 16,
     "lora_dropout": 0.05,
-    "lora_target_modules": ["query_key_value"],
+    "val_set_size": 2000,
+    "lora_target_modules": ["q_proj", "v_proj", "k_proj"],
     "train_on_inputs": true,
     "group_by_length": true,
-    "resume_from_checkpoint": null
+    "resume_from_checkpoint": null,
+    "debug_mode": false
 }

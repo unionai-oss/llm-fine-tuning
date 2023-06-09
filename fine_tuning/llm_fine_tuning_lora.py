@@ -74,6 +74,9 @@ class TrainerConfig:
     lora_r: int = 8
     lora_alpha: int = 16
     lora_dropout: float = 0.05
+    weight_decay: float = 0.02
+    warmup_ratio: float = 0.03
+    lr_scheduler_type: str = "cosine"
     lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "v_proj"])
     train_on_inputs: bool = True
     add_eos_token: bool = True
@@ -280,7 +283,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
         SECRET_GROUP, WANDB_API_SECRET_KEY
     )
-    wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+    wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID", "local")
     os.environ["WANDB_RUN_ID"] = wandb_run_name
 
     gradient_accumulation_steps = config.batch_size // config.micro_batch_size
@@ -378,19 +381,22 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         model.is_parallelizable = True
         model.model_parallel = True
 
-    eval_steps = 10 if config.debug_mode else 200
-    save_steps = 10 if config.debug_mode else 200
+    eval_steps = 20 if config.debug_mode else 200
+    save_steps = 20 if config.debug_mode else 200
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
         eval_dataset=val_data,
         args=transformers.TrainingArguments(
             per_device_train_batch_size=config.micro_batch_size,
+            per_device_eval_batch_size=config.micro_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            warmup_steps=100,
             num_train_epochs=config.num_epochs,
             max_steps=config.max_steps,
             learning_rate=config.learning_rate,
+            warmup_ratio=config.warmup_ratio,
+            weight_decay=config.weight_decay,
+            lr_scheduler_type=config.lr_scheduler_type,
             fp16=True,
             half_precision_backend="auto",
             logging_steps=20,
