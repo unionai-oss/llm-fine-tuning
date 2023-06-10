@@ -15,20 +15,24 @@ pip install -r requirements.txt
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export FLYTECTL_CONFIG=...
+export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml
 export REGISTRY=ghcr.io/unionai-oss
 export FLYTE_SDK_LOGGING_LEVEL=100
-
-# if you created the "llm-fine-tuning" project
 export FLYTE_PROJECT=llm-fine-tuning
 ```
 
 ## Container Build
 
+Build a base image that has transformers and deepspeed pre-built.
+
 ```bash
 docker login ghcr.io
-docker build . -t $REGISTRY/unionai-llm-fine-tuning:latest
-docker push $REGISTRY/unionai-llm-fine-tuning:latest
+gitsha=$(git rev-parse HEAD)
+image_name=$REGISTRY/unionai-llm-fine-tuning-base
+docker build . -t $image_name:$gitsha
+docker build . -t $image_name:latest
+docker push $image_name:$gitsha
+docker push $image_name:latest
 ```
 
 ## Run on Flyte
@@ -62,6 +66,7 @@ To run on flyte:
 ```bash
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --project $FLYTE_PROJECT \
+    --copy-all \
     fine_tuning/llm_fine_tuning.py train \
     --config config/training_config.json \
     --fsdp_config config/zero_config_fsdp.json \
@@ -72,7 +77,7 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --image $REGISTRY/unionai-llm-fine-tuning:latest \
+    --copy-all \
     --project $FLYTE_PROJECT \
     fine_tuning/llm_fine_tuning.py train \
     --config config/training_config.json \

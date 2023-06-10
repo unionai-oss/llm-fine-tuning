@@ -5,12 +5,14 @@ import os
 from dataclasses import asdict, dataclass, field, replace
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Optional, Dict, List, Sequence
+from typing import Annotated, Optional, Dict, List, Sequence
 
 import huggingface_hub as hh
+import pandera as pa
 import torch
 import transformers
 import yaml
+
 from datasets import DatasetDict, load_dataset
 from flytekit import Resources
 from torch.utils.data import Dataset
@@ -25,6 +27,9 @@ from kubernetes.client.models import (
 
 import flytekit
 from flytekit import Secret
+from flytekit.deck.renderer import TopFrameRenderer
+from flytekit.types.structured.structured_dataset import StructuredDataset, PARQUET
+from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
 from flytekitplugins.kfpytorch.task import Elastic
 from dataclasses_json import dataclass_json
 
@@ -52,6 +57,16 @@ PROMPT_DICT = {
 }
 
 
+class WikipediaDataset(pa.DataFrameModel):
+    id: int
+    url: str = pa.Field(str_startswith="https://")
+    title: str = pa.Field(str_length={"max_value": 1_000})
+    text: str = pa.Field(str_length={"max_value": 500_000})
+
+    class Config:
+        coerce = True
+
+
 @dataclass_json
 @dataclass
 class TrainerConfig:
@@ -66,7 +81,7 @@ class TrainerConfig:
     val_set_size: int = 0
     group_by_length: bool = False
     model_name_or_path: Optional[str] = field(default="EleutherAI/pythia-1B-deduped")
-    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+    data_path: str = field(default="yahma/alpaca-cleaned", metadata={"help": "Path to the training data."})
     instruction_key: str = "instruction"
     input_key: str = "input"
     output_key: str = "output"
@@ -254,7 +269,7 @@ class DataCollatorForSupervisedDataset:
         )
 
 
-def make_supervised_data_module(
+def make_supervised_prompt_data_module(
     tokenizer: transformers.PreTrainedTokenizer,
     config: TrainerConfig,
 ) -> Dict:
@@ -274,63 +289,79 @@ def make_supervised_data_module(
     )
 
 
-finetuning_image_spec = flytekit.ImageSpec(
-    base_image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel",
-    name="unionai-llm-fine-tuning",
-    python_version="3.10",
-    apt_packages=["git"],
-    env={
-        "DS_BUILD_OPS": "1",
-        "DS_BUILD_AIO": "0",
-        "DS_BUILD_SPARSE_ATTN": "0",
-    },
-    packages=[
-        "accelerate",
-        # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
-        "'bitsandbytes==0.37.2'",
-        "datasets",
-        "'deepspeed>=0.8.3,<0.9'",
-        "huggingface_hub",
-        "loralib",
-        "numpy",
-        "pyyaml",
-        "rouge_score",
-        "fire",
-        "openai",
-        "'transformers[torch,deepspeed]>=4.28.1,<5'",
-        "tokenizers",
-        "torch",
-        "sentencepiece",
-        "wandb",
-        "flytekit",
-        "flytekitplugins-kfpytorch",
-        "'git+https://github.com/huggingface/peft.git'",
-    ],
-    registry="ghcr.io/unionai-oss",
+def make_causal_lm_data_module(
+    dataset: Dataset, 
+    tokenizer: transformers.PreTrainedTokenizer,
+    config: TrainerConfig,
+) -> Dict:
+    def tokenize(element):
+        outputs = tokenizer(
+            f"<|title|>: {element['title']}\n<|content|>: {element['text']}",
+            truncation=True,
+            max_length=config.model_max_length,
+            return_overflowing_tokens=True,
+            return_length=True,
+        )
+        input_batch = []
+        for length, input_ids in zip(outputs["length"], outputs["input_ids"]):
+            if length == config.model_max_length:
+                input_batch.append(input_ids)
+        return {"input_ids": input_batch}
+
+    return dict(
+        train_dataset=dataset.shuffle().map(tokenize),
+        eval_dataset=None,
+        data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False)
+    )
+
+
+container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning-base:latest"
+finetuning_pod_template = flytekit.PodTemplate(
+    primary_container_name="unionai-llm-fine-tuning",
+    pod_spec=V1PodSpec(
+        containers=[
+            V1Container(
+                name="unionai-llm-fine-tuning",
+                image=container_image,
+                volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
+            )
+        ],
+        volumes=[
+            V1Volume(
+                name="dshm",
+                empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
+            )
+        ]
+    ),
 )
+
+
+@flytekit.task(
+    disable_deck=False,
+    container_image=container_image,
+    cache=True,
+    cache_version="0.0.0",
+)
+def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
+    import pandera as pa
+
+    dataset = load_dataset(config.data_path, config.data_name,)
+    pd_dataset = dataset["train"].to_pandas()
+
+    try:
+        WikipediaDataset.validate(pd_dataset, lazy=True)
+    except pa.errors.SchemaErrors as exc:
+        flytekit.Deck("pandera-errors", TopFrameRenderer(max_rows=100).to_html(exc.failure_cases))
+
+    flytekit.Deck("dataset", HuggingFaceDatasetRenderer().to_html(exc.failure_cases))
+    return StructuredDataset(dataframe=dataset["train"])
 
 
 @flytekit.task(
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
-    container_image=finetuning_image_spec,
-    pod_template=flytekit.PodTemplate(
-        primary_container_name="unionai-llm-fine-tuning",
-        pod_spec=V1PodSpec(
-            containers=[
-                V1Container(
-                    name="unionai-llm-fine-tuning",
-                    volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
-                )
-            ],
-            volumes=[
-                V1Volume(
-                    name="dshm",
-                    empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
-                )
-            ]
-        ),
-    ),
+    container_image=container_image,
+    pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
@@ -430,7 +461,19 @@ def train(
             }
         )
 
-    data_module = make_supervised_data_module(tokenizer=tokenizer, config=config)
+    structured_dataset = None
+    if structured_dataset is not None:
+        data_module = make_causal_lm_data_module(
+            structured_dataset.open(Dataset).all(),
+            tokenizer=tokenizer,
+            config=config,
+        )
+    else:
+        data_module = make_supervised_prompt_data_module(
+            tokenizer=tokenizer,
+            config=config,
+        )
+
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -451,6 +494,25 @@ def train(
 
     print("done")
     return flytekit.directory.FlyteDirectory(path=training_args.output_dir)
+
+
+@flytekit.task(
+    requests=Resources(mem="100Gi", cpu="16", ephemeral_storage="100Gi"),
+)
+def quantize_model(
+    config: TrainerConfig,
+    model_dir: flytekit.directory.FlyteDirectory,
+) -> flytekit.directory.FlyteDirectory:
+    model_dir.download()
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        str(model_dir.path),
+        cache_dir=config.cache_dir,
+        load_in_8bit=True,
+    )
+    trainer = Trainer(model=model, output_dir="/tmp")
+    output_dir = "/tmp"
+    safe_save_model_for_hf_trainer(trainer=trainer, output_dir=output_dir)
+    return flytekit.directory.FlyteDirectory(path=output_dir)
 
 
 MODEL_CARD_TEMPLATE = """
@@ -520,6 +582,11 @@ def save_to_hf_hub(
             path_in_repo=file_name,
             repo_id=publish_args.repo_id,
         )
+
+
+@flytekit.task
+def evaluate_model():
+    ...
 
 
 @flytekit.workflow

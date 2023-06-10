@@ -19,6 +19,7 @@ WORKDIR /root
 # Pod tasks should be exposed in the default image
 RUN pip install -r requirements.txt
 RUN DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed --force-reinstall
+RUN pip install multiprocess==0.70.11.1
 
 COPY . /root
 WORKDIR /root

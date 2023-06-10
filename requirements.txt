@@ -1,19 +1,19 @@
+apache_beam
 accelerate
 bitsandbytes==0.37.2  # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
 datasets
-deepspeed>=0.8.3,<0.9
+deepspeed
 huggingface_hub
-loralib
-numpy
+mwparserfromhell
+pandera
 pyyaml
-rouge_score
-fire
-openai
 transformers[torch,deepspeed]>=4.28.1,<5
 tokenizers
-torch
-sentencepiece
+torch==2.0.0
 wandb
 flytekit
+flytekitplugins-envd
 flytekitplugins-kfpytorch
+flytekitplugins-huggingface
+flytekitplugins-deck-standard
 git+https://github.com/huggingface/peft.git
