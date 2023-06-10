@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Annotated, Optional, Dict, List, Sequence
 
 import huggingface_hub as hh
-import pandera as pa
 import torch
 import transformers
 import yaml
@@ -29,7 +28,6 @@ import flytekit
 from flytekit import Secret
 from flytekit.deck.renderer import TopFrameRenderer
 from flytekit.types.structured.structured_dataset import StructuredDataset, PARQUET
-from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
 from flytekitplugins.kfpytorch.task import Elastic
 from dataclasses_json import dataclass_json
 
@@ -55,16 +53,6 @@ PROMPT_DICT = {
         "### Instruction:\n{instruction}\n\n### Response:"
     ),
 }
-
-
-class WikipediaDataset(pa.DataFrameModel):
-    id: int
-    url: str = pa.Field(str_startswith="https://")
-    title: str = pa.Field(str_length={"max_value": 1_000})
-    text: str = pa.Field(str_length={"max_value": 500_000})
-
-    class Config:
-        coerce = True
 
 
 @dataclass_json
@@ -315,7 +303,8 @@ def make_causal_lm_data_module(
     )
 
 
-container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning-base:latest"
+# container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:KTUDtf9pv1UaaWWcvxJtyA.."
+container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:KTUDtf9pv1UaaWWcvxJtyA.."
 finetuning_pod_template = flytekit.PodTemplate(
     primary_container_name="unionai-llm-fine-tuning",
     pod_spec=V1PodSpec(
@@ -344,6 +333,16 @@ finetuning_pod_template = flytekit.PodTemplate(
 )
 def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     import pandera as pa
+    from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
+
+    class WikipediaDataset(pa.DataFrameModel):
+        id: int
+        url: str = pa.Field(str_startswith="https://")
+        title: str = pa.Field(str_length={"max_value": 1_000})
+        text: str = pa.Field(str_length={"max_value": 500_000})
+
+        class Config:
+            coerce = True
 
     dataset = load_dataset(config.data_path, config.data_name,)
     pd_dataset = dataset["train"].to_pandas()

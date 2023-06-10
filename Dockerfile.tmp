@@ -1,0 +1,22 @@
+FROM ghcr.io/unionai-oss/unionai-llm-fine-tuning:KTUDtf9pv1UaaWWcvxJtyA..
+
+WORKDIR /root
+ENV VENV /opt/venv
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+ENV PYTHONPATH /root
+
+ARG VERSION
+ARG DOCKER_IMAGE
+
+# Pod tasks should be exposed in the default image
+RUN pip install --timeout 100 \
+    pandera \
+    flytekitplugins-huggingface \
+    flytekitplugins-deck-standard \
+    apache_beam \
+    mwparserfromhell
+RUN pip install multiprocess==0.70.11.1 --timeout 100
+
+COPY . /root
+WORKDIR /root

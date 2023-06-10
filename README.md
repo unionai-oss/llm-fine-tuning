@@ -29,10 +29,15 @@ Build a base image that has transformers and deepspeed pre-built.
 docker login ghcr.io
 gitsha=$(git rev-parse HEAD)
 image_name=$REGISTRY/unionai-llm-fine-tuning-base
-docker build . -t $image_name:$gitsha
+docker build . -t $image_name:$gitsha -f Dockerfile.tmp
 docker build . -t $image_name:latest
 docker push $image_name:$gitsha
 docker push $image_name:latest
+```
+
+```bash
+docker build . -t $image_name:$gitsha -f Dockerfile.tmp
+docker push $image_name:$gitsha
 ```
 
 ## Run on Flyte
