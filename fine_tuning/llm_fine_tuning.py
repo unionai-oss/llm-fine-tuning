@@ -12,10 +12,9 @@ import torch
 import transformers
 import yaml
 
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, Dataset, load_dataset
 from flytekit import Resources
 import pandera as pa
-from torch.utils.data import Dataset
 from transformers import Trainer, TrainingArguments
 from kubernetes.client.models import (
     V1PodSpec,
@@ -182,7 +181,7 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
-class SupervisedDataset(Dataset):
+class SupervisedDataset(torch.utils.data.Dataset):
     """Dataset for supervised fine-tuning."""
 
     def __init__(
@@ -302,13 +301,15 @@ def make_causal_lm_data_module(
             max_length=config.model_max_length,
             return_overflowing_tokens=True,
             return_length=True,
+            padding="max_length",
         )
         input_batch = []
         for length, input_ids in zip(outputs["length"], outputs["input_ids"]):
             if length == config.model_max_length:
                 input_batch.append(input_ids)
-        return {"input_ids": input_batch}
+        return {"input_ids": input_batch.squeeze(0)}
 
+    # dataset = Dataset.from_pandas(dataset.to_pandas().head(100))
     return dict(
         train_dataset=dataset.shuffle().map(tokenize),
         eval_dataset=None,
@@ -341,8 +342,8 @@ finetuning_pod_template = flytekit.PodTemplate(
     requests=Resources(mem="8Gi", cpu="8", ephemeral_storage="8Gi"),
     disable_deck=False,
     container_image=container_image,
-    # cache=True,
-    # cache_version="0.0.0",
+    cache=True,
+    cache_version="0.0.0",
 )
 def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     dataset = load_dataset(config.data_path, config.data_name)
@@ -358,6 +359,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 
 
 @flytekit.task(
+    retries=1,
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -376,7 +378,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 )
 def train(
     config: TrainerConfig,
-    structured_dataset: Optional[Annotated[StructuredDataset, PARQUET]] = None,
+    clm_dataset: Optional[Annotated[StructuredDataset, PARQUET]] = None,
     ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
@@ -385,11 +387,11 @@ def train(
         WANDB_API_SECRET_KEY,
     )
     os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+    if config.wandb_project:
+        os.environ["WANDB_PROJECT"] = config.wandb_project
     use_wandb = len(config.wandb_project) > 0 or (
         "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
     )
-    if config.wandb_project:
-        os.environ["WANDB_PROJECT"] = config.wandb_project
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
@@ -432,12 +434,13 @@ def train(
         cache_dir=config.cache_dir,
         model_max_length=config.model_max_length,
         padding_side="right",
+        # pad_token=DEFAULT_PAD_TOKEN,
     )
 
     # Try using fast version of the model's tokenizer, if available.
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config.base_model, use_fast=True, **tokenizer_kwargs
+            config.base_model, use_fast=True, **tokenizer_kwargs,
         )
     except:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -459,10 +462,9 @@ def train(
             }
         )
 
-    structured_dataset = None
-    if structured_dataset is not None:
+    if clm_dataset is not None:
         data_module = make_causal_lm_data_module(
-            structured_dataset.open(Dataset).all(),
+            clm_dataset.open(Dataset).all(),
             tokenizer=tokenizer,
             config=config,
         )
@@ -594,10 +596,11 @@ def fine_tune(
     ds_config: Optional[dict] = None,
 ):
     data = get_data(config=config)
-    # model_dir = train(
-    #     training_config=training_config,
-    #     ds_config=ds_config,
-    # )
+    model_dir = train(
+        config=config,
+        clm_dataset=data,
+        ds_config=ds_config,
+    )
     # save_to_hf_hub(
     #     model_dir=model_dir,
     #     publish_config=publish_config,

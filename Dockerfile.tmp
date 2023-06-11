@@ -17,6 +17,7 @@ RUN pip install --timeout 100 \
     apache_beam \
     mwparserfromhell
 RUN pip install multiprocess==0.70.11.1 --timeout 100
+RUN pip install sentencepiece
 
 COPY . /root
 WORKDIR /root
