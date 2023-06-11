@@ -376,6 +376,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 )
 def train(
     config: TrainerConfig,
+    structured_dataset: Optional[Annotated[StructuredDataset, PARQUET]] = None,
     ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
