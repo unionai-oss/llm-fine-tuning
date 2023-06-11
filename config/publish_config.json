@@ -1,0 +1,10 @@
+{
+    "repo_id": "EleutherAI/pythia-1B-deduped-wikipedia",
+    "readme": "# pythia-1B-deduped fine-tuned on wikipedia",
+    "language": "python",
+    "model_card": {
+        "language": ["en"],
+        "license": "apache-2.0",
+        "tags": ["pytorch", "causal-lm", "pythia", "fine-tuning", "wikipedia"]
+    }
+}

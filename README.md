@@ -68,23 +68,12 @@ To run on flyte:
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --project $FLYTE_PROJECT \
-    --copy-all \
-    fine_tuning/llm_fine_tuning.py train \
-    --config config/training_config.json \
-    --fsdp_config config/zero_config_fsdp.json \
-    --ds_config '{}'
-```
-
-#### Using DeepSpeed
-
-```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config.json \
-    --ds_config config/zero_config_ds.json \
+    --publish_config config/publish_config.json \
+    --ds_config config/zero_config_ds.json
 ```
 
 ```bash

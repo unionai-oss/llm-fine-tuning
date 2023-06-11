@@ -70,6 +70,9 @@ PROMPT_DICT = {
 @dataclass_json
 @dataclass
 class TrainerConfig:
+    base_model: Optional[str] = field(default="EleutherAI/pythia-1B-deduped")
+    data_path: str = field(default="yahma/alpaca-cleaned", metadata={"help": "Path to the training data."})
+    data_name: str = field(default=None, metadata={"help": "Path to the training data config name."})
     num_epochs: int = 1
     max_steps: int = -1
     learning_rate: float = 0.00002
@@ -80,8 +83,6 @@ class TrainerConfig:
     micro_batch_size: int = 1
     val_set_size: int = 0
     group_by_length: bool = False
-    model_name_or_path: Optional[str] = field(default="EleutherAI/pythia-1B-deduped")
-    data_path: str = field(default="yahma/alpaca-cleaned", metadata={"help": "Path to the training data."})
     instruction_key: str = "instruction"
     input_key: str = "input"
     output_key: str = "output"
@@ -337,13 +338,14 @@ finetuning_pod_template = flytekit.PodTemplate(
 
 
 @flytekit.task(
+    requests=Resources(mem="8Gi", cpu="8", ephemeral_storage="8Gi"),
     disable_deck=False,
     container_image=container_image,
     # cache=True,
     # cache_version="0.0.0",
 )
 def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
-    dataset = load_dataset(config.data_path, config.data_name,)
+    dataset = load_dataset(config.data_path, config.data_name)
     pd_dataset = dataset["train"].to_pandas()
 
     try:
@@ -351,7 +353,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     except pa.errors.SchemaErrors as exc:
         flytekit.Deck("pandera-errors", TopFrameRenderer(max_rows=100).to_html(exc.failure_cases))
 
-    flytekit.Deck("dataset", HuggingFaceDatasetRenderer().to_html(exc.failure_cases))
+    flytekit.Deck("dataset", HuggingFaceDatasetRenderer().to_html(dataset["train"]))
     return StructuredDataset(dataframe=dataset["train"])
 
 
@@ -421,7 +423,7 @@ def train(
     )
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
-        config.model_name_or_path,
+        config.base_model,
         cache_dir=config.cache_dir,
     )
 
@@ -434,11 +436,11 @@ def train(
     # Try using fast version of the model's tokenizer, if available.
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config.model_name_or_path, use_fast=True, **tokenizer_kwargs
+            config.base_model, use_fast=True, **tokenizer_kwargs
         )
     except:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            config.model_name_or_path, use_fast=False, **tokenizer_kwargs
+            config.base_model, use_fast=False, **tokenizer_kwargs
         )
 
     if tokenizer.pad_token is None:
@@ -447,7 +449,7 @@ def train(
             tokenizer=tokenizer,
             model=model,
         )
-    if "llama" in config.model_name_or_path:
+    if "llama" in config.base_model:
         tokenizer.add_special_tokens(
             {
                 "eos_token": DEFAULT_EOS_TOKEN,
@@ -531,7 +533,7 @@ MODEL_CARD_TEMPLATE = """
 )
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
-    publish_args: PublishArguments,
+    publish_config: PublishConfig,
 ):
     # make sure the file can be downloaded
     model_dir.download()
@@ -543,14 +545,14 @@ def save_to_hf_hub(
         )
     )
     api = hh.HfApi()
-    api.create_repo(publish_args.repo_id, exist_ok=True)
+    api.create_repo(publish_config.repo_id, exist_ok=True)
 
     with (root / "data_args.json").open() as f:
         data_args = json.load(f)
 
-    if publish_args.readme is not None:
+    if publish_config.readme is not None:
         StringIO()
-        model_card_dict = publish_args.model_card.to_dict()
+        model_card_dict = publish_config.model_card.to_dict()
 
         dataset_path = data_args.get("data_path", None)
         if dataset_path:
@@ -558,12 +560,12 @@ def save_to_hf_hub(
 
         readme_str = MODEL_CARD_TEMPLATE.format(
             model_card_content=yaml.dump(model_card_dict),
-            readme_content=publish_args.readme,
+            readme_content=publish_config.readme,
         )
         api.upload_file(
             path_or_fileobj=BytesIO(readme_str.encode()),
             path_in_repo="README.md",
-            repo_id=publish_args.repo_id,
+            repo_id=publish_config.repo_id,
         )
 
     for file_name in [
@@ -575,7 +577,7 @@ def save_to_hf_hub(
         api.upload_file(
             path_or_fileobj=root / file_name,
             path_in_repo=file_name,
-            repo_id=publish_args.repo_id,
+            repo_id=publish_config.repo_id,
         )
 
 
@@ -586,18 +588,18 @@ def evaluate_model():
 
 @flytekit.workflow
 def fine_tune(
-    training_config: TrainerConfig,
-    publish_args: PublishConfig,
+    config: TrainerConfig,
+    publish_config: PublishConfig,
     ds_config: Optional[dict] = None,
 ):
-    data = get_data(config=training_config)
+    data = get_data(config=config)
     # model_dir = train(
     #     training_config=training_config,
     #     ds_config=ds_config,
     # )
     # save_to_hf_hub(
     #     model_dir=model_dir,
-    #     publish_args=publish_args,
+    #     publish_config=publish_config,
     # )
 
 
