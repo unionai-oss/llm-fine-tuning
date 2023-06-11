@@ -17,9 +17,9 @@ COPY ./requirements.txt /root/requirements.txt
 WORKDIR /root
 
 # Pod tasks should be exposed in the default image
-RUN pip install -r requirements.txt --timeout 100
-RUN DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed==0.8.3 --force-reinstall --timeout 100
-RUN pip install multiprocess==0.70.11.1 --timeout 100
+RUN pip install -r requirements.txt
+RUN DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed==0.8.3 --force-reinstall
+RUN pip install multiprocess==0.70.11.1
 
 COPY . /root
 WORKDIR /root
