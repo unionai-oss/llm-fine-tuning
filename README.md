@@ -82,6 +82,15 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
+    fine_tuning/llm_fine_tuning.py fine_tune \
+    --config config/training_config.json \
+    --ds_config config/zero_config_ds.json \
+```
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
     fine_tuning/llm_fine_tuning.py train \
     --config config/training_config.json \
     --ds_config config/zero_config_ds.json \

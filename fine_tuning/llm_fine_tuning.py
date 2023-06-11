@@ -14,6 +14,7 @@ import yaml
 
 from datasets import DatasetDict, load_dataset
 from flytekit import Resources
+import pandera as pa
 from torch.utils.data import Dataset
 from transformers import Trainer, TrainingArguments
 from kubernetes.client.models import (
@@ -27,9 +28,20 @@ from kubernetes.client.models import (
 import flytekit
 from flytekit import Secret
 from flytekit.deck.renderer import TopFrameRenderer
+from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
 from flytekit.types.structured.structured_dataset import StructuredDataset, PARQUET
 from flytekitplugins.kfpytorch.task import Elastic
 from dataclasses_json import dataclass_json
+
+
+class WikipediaDataset(pa.DataFrameModel):
+    id: int
+    url: str = pa.Field(str_startswith="https://")
+    title: str = pa.Field(str_length={"max_value": 1_000})
+    text: str = pa.Field(str_length={"max_value": 500_000})
+
+    class Config:
+        coerce = True
 
 
 SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
@@ -92,7 +104,7 @@ class HuggingFaceModelCard:
 
 @dataclass_json
 @dataclass
-class PublishArguments:
+class PublishConfig:
     repo_id: str
     readme: Optional[str] = None
     model_card: Optional[HuggingFaceModelCard] = None
@@ -303,8 +315,7 @@ def make_causal_lm_data_module(
     )
 
 
-# container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:KTUDtf9pv1UaaWWcvxJtyA.."
-container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:KTUDtf9pv1UaaWWcvxJtyA.."
+container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:96330d1050c00815069864802a763e39af3cf526"
 finetuning_pod_template = flytekit.PodTemplate(
     primary_container_name="unionai-llm-fine-tuning",
     pod_spec=V1PodSpec(
@@ -328,22 +339,10 @@ finetuning_pod_template = flytekit.PodTemplate(
 @flytekit.task(
     disable_deck=False,
     container_image=container_image,
-    cache=True,
-    cache_version="0.0.0",
+    # cache=True,
+    # cache_version="0.0.0",
 )
 def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
-    import pandera as pa
-    from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
-
-    class WikipediaDataset(pa.DataFrameModel):
-        id: int
-        url: str = pa.Field(str_startswith="https://")
-        title: str = pa.Field(str_length={"max_value": 1_000})
-        text: str = pa.Field(str_length={"max_value": 500_000})
-
-        class Config:
-            coerce = True
-
     dataset = load_dataset(config.data_path, config.data_name,)
     pd_dataset = dataset["train"].to_pandas()
 
@@ -375,7 +374,6 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 )
 def train(
     config: TrainerConfig,
-    fsdp_config: Optional[dict] = None,
     ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
@@ -419,8 +417,6 @@ def train(
         logging_steps=10,
         fp16=True,
         output_dir="/tmp",
-        fsdp=fsdp_config.get("fsdp", False),
-        fsdp_config=fsdp_config.get("fsdp_config", {}),
         deepspeed=ds_config,
     )
 
@@ -591,21 +587,18 @@ def evaluate_model():
 @flytekit.workflow
 def fine_tune(
     training_config: TrainerConfig,
-    publish_args: PublishArguments,
-    fsdp: Optional[List[str]] = None,
-    fsdp_config: Optional[dict] = None,
+    publish_args: PublishConfig,
     ds_config: Optional[dict] = None,
 ):
-    model_dir = train(
-        training_config=training_config,
-        fsdp=fsdp,
-        fsdp_config=fsdp_config,
-        ds_config=ds_config,
-    )
-    save_to_hf_hub(
-        model_dir=model_dir,
-        publish_args=publish_args,
-    )
+    data = get_data(config=training_config)
+    # model_dir = train(
+    #     training_config=training_config,
+    #     ds_config=ds_config,
+    # )
+    # save_to_hf_hub(
+    #     model_dir=model_dir,
+    #     publish_args=publish_args,
+    # )
 
 
 def train_cli():
