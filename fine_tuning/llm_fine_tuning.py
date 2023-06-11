@@ -85,6 +85,7 @@ class TrainerConfig:
     instruction_key: str = "instruction"
     input_key: str = "input"
     output_key: str = "output"
+    device_map: str = "auto"
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default="adamw_torch")
     model_max_length: int = field(
@@ -301,23 +302,29 @@ def make_causal_lm_data_module(
             max_length=config.model_max_length,
             return_overflowing_tokens=True,
             return_length=True,
-            padding="max_length",
+            # TODO: try removing that as per
+            # "You're using a GPTNeoXTokenizerFast tokenizer. Please note that
+            # with a fast tokenizer, using the `__call__` method is faster than
+            # using a method to encode the text followed by a call to the `pad`
+            # method to get a padded encoding"
+            # padding="max_length",
+            return_tensors=None,
         )
         input_batch = []
         for length, input_ids in zip(outputs["length"], outputs["input_ids"]):
             if length == config.model_max_length:
                 input_batch.append(input_ids)
-        return {"input_ids": input_batch.squeeze(0)}
+        return {"input_ids": input_batch}
 
-    # dataset = Dataset.from_pandas(dataset.to_pandas().head(100))
+    dataset = Dataset.from_pandas(dataset.to_pandas().head(100))
     return dict(
-        train_dataset=dataset.shuffle().map(tokenize),
+        train_dataset=dataset.shuffle().map(tokenize, batched=True, remove_columns=dataset.column_names),
         eval_dataset=None,
         data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False)
     )
 
 
-container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:96330d1050c00815069864802a763e39af3cf526"
+container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0"
 finetuning_pod_template = flytekit.PodTemplate(
     primary_container_name="unionai-llm-fine-tuning",
     pod_spec=V1PodSpec(
@@ -359,7 +366,9 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 
 
 @flytekit.task(
-    retries=1,
+    retries=3,
+    cache=True,
+    cache_version="0.0.2",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -420,9 +429,9 @@ def train(
         report_to="wandb" if use_wandb else None,
         half_precision_backend="auto",
         logging_steps=10,
-        fp16=True,
         output_dir="/tmp",
         deepspeed=ds_config,
+        fp16=True,
     )
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
@@ -434,7 +443,7 @@ def train(
         cache_dir=config.cache_dir,
         model_max_length=config.model_max_length,
         padding_side="right",
-        # pad_token=DEFAULT_PAD_TOKEN,
+        pad_token=DEFAULT_PAD_TOKEN,
     )
 
     # Try using fast version of the model's tokenizer, if available.
@@ -474,6 +483,7 @@ def train(
             config=config,
         )
 
+    model.print_trainable_parameters()
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -482,14 +492,13 @@ def train(
     )
     print("training model")
     trainer.train()
-    trainer.save_state()
     print("saving model")
-    safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
+    trainer.save_model(training_args.output_dir)
 
     print("saving arguments for model, data, and training")
     output_root = Path(training_args.output_dir)
 
-    with (output_root / "config.json").open("w") as f:
+    with (output_root / "flyte_training_config.json").open("w") as f:
         json.dump(config.to_dict(), f)
 
     print("done")
@@ -497,21 +506,33 @@ def train(
 
 
 @flytekit.task(
-    requests=Resources(mem="100Gi", cpu="16", ephemeral_storage="100Gi"),
+    cache=True,
+    cache_version="0.0.0",
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    container_image=container_image,
 )
 def quantize_model(
     config: TrainerConfig,
     model_dir: flytekit.directory.FlyteDirectory,
 ) -> flytekit.directory.FlyteDirectory:
     model_dir.download()
+
+    device_map = config.device_map
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    ddp = world_size != 1
+    if ddp:
+        device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
+        gradient_accumulation_steps = gradient_accumulation_steps // world_size
+
     model = transformers.AutoModelForCausalLM.from_pretrained(
         str(model_dir.path),
         cache_dir=config.cache_dir,
         load_in_8bit=True,
+        device_map=device_map,
     )
-    trainer = Trainer(model=model, output_dir="/tmp")
     output_dir = "/tmp"
-    safe_save_model_for_hf_trainer(trainer=trainer, output_dir=output_dir)
+    trainer = Trainer(model=model)
+    trainer.save_model(output_dir=output_dir)
     return flytekit.directory.FlyteDirectory(path=output_dir)
 
 
@@ -554,7 +575,6 @@ def save_to_hf_hub(
         data_args = json.load(f)
 
     if publish_config.readme is not None:
-        StringIO()
         model_card_dict = publish_config.model_card.to_dict()
 
         dataset_path = data_args.get("data_path", None)
@@ -601,6 +621,7 @@ def fine_tune(
         clm_dataset=data,
         ds_config=ds_config,
     )
+    quantied_model_dir = quantize_model(config=config, model_dir=model_dir)
     # save_to_hf_hub(
     #     model_dir=model_dir,
     #     publish_config=publish_config,

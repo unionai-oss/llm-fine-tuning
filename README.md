@@ -80,10 +80,9 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    fine_tuning/llm_fine_tuning.py train \
+    fine_tuning/llm_fine_tuning.py quantize_model \
     --config config/training_config.json \
-    --ds_config config/zero_config_ds.json \
-    --fsdp_config '{}'
+    --model_dir s3://union-oc-production-demo/sf/f84a9c5060d6a4154893-n1-0/f818e7443eec99351f360961b20dbb24
 ```
 
 ### Fine-tuning with LoRA
