@@ -519,7 +519,6 @@ def train(
     trainer.save_state()
     print("saving model")
     trainer.save_model(output_dir=training_args.output_dir)
-    # safe_save_model_for_hf_trainer(trainer, training_args.output_dir)
 
     print("saving arguments for model, data, and training")
     output_root = Path(training_args.output_dir)
@@ -566,7 +565,6 @@ def quantize_model(
     )
     output_dir = "/tmp"
     trainer = Trainer(model=model, tokenizer=tokenizer)
-    # safe_save_model_for_hf_trainer(trainer, output_dir)
     trainer.save_model(output_dir=output_dir)
 
     src, dst = Path(model_dir.path), Path(output_dir)
