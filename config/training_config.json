@@ -1,9 +1,9 @@
 {
-    "base_model": "EleutherAI/pythia-1B-deduped",
+    "base_model": "togethercomputer/RedPajama-INCITE-Chat-3B-v1",
     "data_path":"wikipedia",
     "data_name": "20220301.simple",
     "num_epochs": 1,
-    "max_steps": 10,
+    "max_steps": 20,
     "batch_size": 8,
     "micro_batch_size": 1
 }

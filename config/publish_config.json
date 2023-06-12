@@ -1,10 +1,10 @@
 {
-    "repo_id": "unionai/pythia-1B-deduped-wikipedia",
-    "readme": "# pythia-1B-deduped fine-tuned on wikipedia",
+    "repo_id": "unionai/RedPajama-INCITE-Chat-3B-v1-wikipedia",
+    "readme": "# RedPajama-INCITE-Chat-3B-v1 fine-tuned on wikipedia",
     "language": "python",
     "model_card": {
         "language": ["en"],
         "license": "apache-2.0",
-        "tags": ["pytorch", "causal-lm", "pythia", "fine-tuning", "wikipedia"]
+        "tags": ["pytorch", "causal-lm", "gpt_neox", "fine-tuning", "wikipedia"]
     }
 }

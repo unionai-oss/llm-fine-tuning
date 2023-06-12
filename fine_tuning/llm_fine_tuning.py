@@ -327,12 +327,6 @@ def make_causal_lm_data_module(
             max_length=config.model_max_length,
             return_overflowing_tokens=True,
             return_length=True,
-            # TODO: try removing that as per
-            # "You're using a GPTNeoXTokenizerFast tokenizer. Please note that
-            # with a fast tokenizer, using the `__call__` method is faster than
-            # using a method to encode the text followed by a call to the `pad`
-            # method to get a padded encoding"
-            # padding="max_length",
             return_tensors=None,
         )
         input_batch = []
@@ -393,7 +387,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.4",
+    cache_version="0.0.5",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -407,7 +401,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
             group=SECRET_GROUP,
             key=WANDB_API_SECRET_KEY,
             mount_requirement=Secret.MountType.FILE,
-        )
+        ),
     ],
 )
 def train(
@@ -519,7 +513,6 @@ def train(
     trainer.save_state()
     print("saving model")
     trainer.save_model(output_dir=training_args.output_dir)
-    # safe_save_model_for_hf_trainer(trainer, training_args.output_dir)
 
     print("saving arguments for model, data, and training")
     output_root = Path(training_args.output_dir)
@@ -529,53 +522,6 @@ def train(
 
     print("done")
     return flytekit.directory.FlyteDirectory(path=training_args.output_dir)
-
-
-@flytekit.task(
-    cache=True,
-    cache_version="0.0.3",
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
-    container_image=container_image,
-)
-def quantize_model(
-    config: TrainerConfig,
-    model_dir: flytekit.directory.FlyteDirectory,
-) -> flytekit.directory.FlyteDirectory:
-    model_dir.download()
-
-    device_map = config.device_map
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
-    ddp = world_size != 1
-    if ddp:
-        device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
-        gradient_accumulation_steps = gradient_accumulation_steps // world_size
-
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        str(model_dir.path),
-        cache_dir=config.cache_dir,
-        load_in_8bit=True,
-        device_map=device_map,
-    )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        config.base_model,
-        use_fast=True,
-        cache_dir=config.cache_dir,
-        model_max_length=config.model_max_length,
-        padding_side="right",
-        pad_token=DEFAULT_PAD_TOKEN,
-    )
-    output_dir = "/tmp"
-    trainer = Trainer(model=model, tokenizer=tokenizer)
-    # safe_save_model_for_hf_trainer(trainer, output_dir)
-    trainer.save_model(output_dir=output_dir)
-
-    src, dst = Path(model_dir.path), Path(output_dir)
-    for file_name in [
-        "config.json",
-        "flyte_training_config.json",
-    ]:
-        shutil.copy(src / file_name, dst / file_name)
-    return flytekit.directory.FlyteDirectory(path=output_dir)
 
 
 MODEL_CARD_TEMPLATE = """
@@ -590,7 +536,7 @@ MODEL_CARD_TEMPLATE = """
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.2",
+    cache_version="0.0.4",
     requests=Resources(mem="10Gi", cpu="1"),
     container_image=container_image,
     secret_requests=[
@@ -603,8 +549,8 @@ MODEL_CARD_TEMPLATE = """
 )
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
+    config: TrainerConfig,
     publish_config: PublishConfig,
-    quantized_8bit: Optional[bool] = None,
 ) -> str:
     # make sure the file can be downloaded
     model_dir.download()
@@ -616,44 +562,39 @@ def save_to_hf_hub(
         )
     )
     api = hh.HfApi()
-    if quantized_8bit:
-        repo_id = f"{publish_config.repo_id}-8bit"
-    else:
-        repo_id = publish_config.repo_id
-
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        str(model_dir.path),
+        cache_dir=config.cache_dir,
+        torch_dtype=torch.float32,
+        device_map="auto",
+    )
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        config.base_model,
+        use_fast=True,
+        cache_dir=config.cache_dir,
+        model_max_length=config.model_max_length,
+        padding_side="right",
+        pad_token=DEFAULT_PAD_TOKEN,
+    )
+    trainer = Trainer(model=model, tokenizer=tokenizer)
+    repo_id = publish_config.repo_id
     repo_url = api.create_repo(repo_id, exist_ok=True)
-
-    with (root / "flyte_training_config.json").open() as f:
-        config = json.load(f)
-
-    if publish_config.readme is not None:
-        model_card_dict = publish_config.model_card.to_dict()
-
-        dataset_path = config.get("data_path", None)
-        if dataset_path:
-            model_card_dict["datasets"] = [config.get("data_path")]
-
-        readme_str = MODEL_CARD_TEMPLATE.format(
-            model_card_content=yaml.dump(model_card_dict),
-            readme_content=publish_config.readme,
-        )
-        api.upload_file(
-            path_or_fileobj=BytesIO(readme_str.encode()),
-            path_in_repo="README.md",
-            repo_id=repo_id,
-        )
-
+    trainer.model.push_to_hub(repo_id=repo_id)
     api.upload_folder(
         repo_id=repo_id,
         folder_path=root,
-        ignore_patterns=["flyte-*", "models--*"]
+        allow_patterns=[
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "flyte_training_config.json",
+        ],
     )
     return str(repo_url)
 
 
 @flytekit.task
 def evaluate_model(
-    lm_eval_harnes_config: LMEvalHarnessConfig
+    lm_eval_harness_config: LMEvalHarnessConfig
 ):
     ...
 
@@ -670,19 +611,10 @@ def fine_tune(
         clm_dataset=data,
         ds_config=ds_config,
     )
-    quantized_model_dir = quantize_model(
-        config=config,
-        model_dir=model_dir,
-    )
-
     repo_url = save_to_hf_hub(
         model_dir=model_dir,
+        config=config,
         publish_config=publish_config,
-    )
-    quantized_repo_url = save_to_hf_hub(
-        model_dir=quantized_model_dir,
-        publish_config=publish_config,
-        quantized_8bit=True,
     )
 
 
