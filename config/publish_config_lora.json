@@ -1,6 +1,6 @@
 {
-    "repo_id": "unionai/RedPajama-INCITE-Base-3B-v1-wikipedia",
-    "readme": "# RedPajama-INCITE-Base-3B-v1 fine-tuned on wikipedia",
+    "repo_id": "unionai/RedPajama-INCITE-7B-Chat-alpaca-cleaned",
+    "readme": "# RedPajama-INCITE-7B fine-tuned on alpaca-cleaned",
     "language": "python",
     "model_card": {
         "language": ["en"],

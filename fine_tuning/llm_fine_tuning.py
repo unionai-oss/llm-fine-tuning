@@ -327,12 +327,6 @@ def make_causal_lm_data_module(
             max_length=config.model_max_length,
             return_overflowing_tokens=True,
             return_length=True,
-            # TODO: try removing that as per
-            # "You're using a GPTNeoXTokenizerFast tokenizer. Please note that
-            # with a fast tokenizer, using the `__call__` method is faster than
-            # using a method to encode the text followed by a call to the `pad`
-            # method to get a padded encoding"
-            # padding="max_length",
             return_tensors=None,
         )
         input_batch = []
@@ -588,8 +582,8 @@ MODEL_CARD_TEMPLATE = """
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.2",
-    requests=Resources(mem="10Gi", cpu="1"),
+    cache_version="0.0.3",
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
     secret_requests=[
         Secret(

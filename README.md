@@ -76,22 +76,22 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --ds_config config/zero_config_ds.json
 ```
 
-```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --copy-all \
-    --project $FLYTE_PROJECT \
-    fine_tuning/llm_fine_tuning.py quantize_model \
-    --config config/training_config.json \
-    --model_dir s3://union-oc-production-demo/sf/f84a9c5060d6a4154893-n1-0/f818e7443eec99351f360961b20dbb24
-```
-
 ### Fine-tuning with LoRA
 
 The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --image $REGISTRY/unionai-llm-fine-tuning:latest \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    fine_tuning/llm_fine_tuning_lora.py fine_tune \
+    --config config/training_config_lora.json \
+    --publish_config config/publish_config.json
+```
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG run --remote \
+    --copy-all \
     --project $FLYTE_PROJECT \
     fine_tuning/llm_fine_tuning_lora.py train \
     --config config/training_config_lora.json
