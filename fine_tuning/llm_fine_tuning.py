@@ -2,8 +2,9 @@ import copy
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, field, replace
-from io import BytesIO, StringIO
+import shutil
+from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Optional, Dict, List, Sequence
 
@@ -109,6 +110,30 @@ class PublishConfig:
     repo_id: str
     readme: Optional[str] = None
     model_card: Optional[HuggingFaceModelCard] = None
+
+
+@dataclass_json
+@dataclass
+class LMEvalHarnessConfig:
+    """
+    Config base on:
+    https://github.com/EleutherAI/lm-evaluation-harness/blob/master/main.py
+    """
+    model: str = field(default="hf-causal-experimental")
+    model_args: str = field(default="unionai/pythia-1B-deduped-wikipedia")
+    tasks: Optional[str] = field(default=None)
+    provide_description: Optional[bool] = field(default=False)
+    num_fewshot: int = 0
+    batch_size: Optional[str] = field(default=None)
+    device: Optional[str]= field(default=None)
+    output_path: Optional[str]= field(default=None)
+    limit: Optional[float]= field(default=None)
+    data_sampling: Optional[float]= field(default=None)
+    no_cache: Optional[bool] = field(default=False)
+    description_dict_path: Optional[dict] = field(default=None)
+    check_integrity: Optional[bool] = field(default=False)
+    write_out: Optional[bool] = field(default=False)
+    output_base_path: Optional[str]= field(default=None)
 
 
 def safe_save_model_for_hf_trainer(trainer: transformers.Trainer, output_dir: str):
@@ -368,7 +393,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.2",
+    cache_version="0.0.4",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -483,7 +508,6 @@ def train(
             config=config,
         )
 
-    model.print_trainable_parameters()
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -492,8 +516,10 @@ def train(
     )
     print("training model")
     trainer.train()
+    trainer.save_state()
     print("saving model")
-    trainer.save_model(training_args.output_dir)
+    trainer.save_model(output_dir=training_args.output_dir)
+    # safe_save_model_for_hf_trainer(trainer, training_args.output_dir)
 
     print("saving arguments for model, data, and training")
     output_root = Path(training_args.output_dir)
@@ -507,7 +533,7 @@ def train(
 
 @flytekit.task(
     cache=True,
-    cache_version="0.0.0",
+    cache_version="0.0.3",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
 )
@@ -530,9 +556,25 @@ def quantize_model(
         load_in_8bit=True,
         device_map=device_map,
     )
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        config.base_model,
+        use_fast=True,
+        cache_dir=config.cache_dir,
+        model_max_length=config.model_max_length,
+        padding_side="right",
+        pad_token=DEFAULT_PAD_TOKEN,
+    )
     output_dir = "/tmp"
-    trainer = Trainer(model=model)
+    trainer = Trainer(model=model, tokenizer=tokenizer)
+    # safe_save_model_for_hf_trainer(trainer, output_dir)
     trainer.save_model(output_dir=output_dir)
+
+    src, dst = Path(model_dir.path), Path(output_dir)
+    for file_name in [
+        "config.json",
+        "flyte_training_config.json",
+    ]:
+        shutil.copy(src / file_name, dst / file_name)
     return flytekit.directory.FlyteDirectory(path=output_dir)
 
 
@@ -546,7 +588,11 @@ MODEL_CARD_TEMPLATE = """
 
 
 @flytekit.task(
+    retries=3,
+    cache=True,
+    cache_version="0.0.2",
     requests=Resources(mem="10Gi", cpu="1"),
+    container_image=container_image,
     secret_requests=[
         Secret(
             group=SECRET_GROUP,
@@ -558,7 +604,8 @@ MODEL_CARD_TEMPLATE = """
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
     publish_config: PublishConfig,
-):
+    quantized_8bit: Optional[bool] = None,
+) -> str:
     # make sure the file can be downloaded
     model_dir.download()
     root = Path(model_dir.path)
@@ -569,17 +616,22 @@ def save_to_hf_hub(
         )
     )
     api = hh.HfApi()
-    api.create_repo(publish_config.repo_id, exist_ok=True)
+    if quantized_8bit:
+        repo_id = f"{publish_config.repo_id}-8bit"
+    else:
+        repo_id = publish_config.repo_id
 
-    with (root / "data_args.json").open() as f:
-        data_args = json.load(f)
+    repo_url = api.create_repo(repo_id, exist_ok=True)
+
+    with (root / "flyte_training_config.json").open() as f:
+        config = json.load(f)
 
     if publish_config.readme is not None:
         model_card_dict = publish_config.model_card.to_dict()
 
-        dataset_path = data_args.get("data_path", None)
+        dataset_path = config.get("data_path", None)
         if dataset_path:
-            model_card_dict["datasets"] = [data_args.get("data_path")]
+            model_card_dict["datasets"] = [config.get("data_path")]
 
         readme_str = MODEL_CARD_TEMPLATE.format(
             model_card_content=yaml.dump(model_card_dict),
@@ -588,24 +640,21 @@ def save_to_hf_hub(
         api.upload_file(
             path_or_fileobj=BytesIO(readme_str.encode()),
             path_in_repo="README.md",
-            repo_id=publish_config.repo_id,
+            repo_id=repo_id,
         )
 
-    for file_name in [
-        "config.json",
-        "pytorch_model.bin",
-        "tokenizer.json",
-        "tokenizer_config.json",
-    ]:
-        api.upload_file(
-            path_or_fileobj=root / file_name,
-            path_in_repo=file_name,
-            repo_id=publish_config.repo_id,
-        )
+    api.upload_folder(
+        repo_id=repo_id,
+        folder_path=root,
+        ignore_patterns=["flyte-*", "models--*"]
+    )
+    return str(repo_url)
 
 
 @flytekit.task
-def evaluate_model():
+def evaluate_model(
+    lm_eval_harnes_config: LMEvalHarnessConfig
+):
     ...
 
 
@@ -621,11 +670,20 @@ def fine_tune(
         clm_dataset=data,
         ds_config=ds_config,
     )
-    quantied_model_dir = quantize_model(config=config, model_dir=model_dir)
-    # save_to_hf_hub(
-    #     model_dir=model_dir,
-    #     publish_config=publish_config,
-    # )
+    quantized_model_dir = quantize_model(
+        config=config,
+        model_dir=model_dir,
+    )
+
+    repo_url = save_to_hf_hub(
+        model_dir=model_dir,
+        publish_config=publish_config,
+    )
+    quantized_repo_url = save_to_hf_hub(
+        model_dir=quantized_model_dir,
+        publish_config=publish_config,
+        quantized_8bit=True,
+    )
 
 
 def train_cli():
