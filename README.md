@@ -86,7 +86,7 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
     --project $FLYTE_PROJECT \
     fine_tuning/llm_fine_tuning_lora.py fine_tune \
     --config config/training_config_lora.json \
-    --publish_config config/publish_config.json
+    --publish_config config/publish_config_lora.json
 ```
 
 ```bash

@@ -238,7 +238,7 @@ container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bc
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.0",
+    cache_version="0.0.2",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -423,8 +423,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         model = torch.compile(model)
 
     logger.info("Starting training run")
-    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint)
-
+    trainer.save_model(output_dir=config.output_dir)
     model.save_pretrained(config.output_dir)
     return flytekit.directory.FlyteDirectory(path=config.output_dir)
 
@@ -442,7 +441,7 @@ MODEL_CARD_TEMPLATE = """
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.0",
+    cache_version="0.0.1",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
     secret_requests=[
