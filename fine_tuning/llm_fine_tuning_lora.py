@@ -40,10 +40,11 @@ import bitsandbytes as bnb
 from peft import (
     LoraConfig,
     get_peft_model,
+    prepare_model_for_int8_training,
     get_peft_model_state_dict,
     set_peft_model_state_dict,
 )
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 logging.set_verbosity_debug()
@@ -68,6 +69,8 @@ class TrainerConfig:
     micro_batch_size: int = 4
     num_epochs: int = 3
     max_steps: int = -1
+    eval_steps: int = 200
+    save_steps: int = 200
     learning_rate: float = 3e-4
     cutoff_len: int = 256
     val_set_size: int = 2000
@@ -190,7 +193,7 @@ class TokenizerHelper:
         return tokenized_full_prompt
 
 
-def prepare_model_for_int8_training(model: nn.Module):
+def custom_prepare_model_for_int8_training(model: nn.Module):
     for param in model.parameters():
         param.requires_grad = False  # freeze the model - train adapters later
         if param.ndim == 1:
@@ -207,46 +210,13 @@ def prepare_model_for_int8_training(model: nn.Module):
     return model
 
 
-finetuning_image_spec = flytekit.ImageSpec(
-    base_image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel",
-    name="unionai-llm-fine-tuning",
-    python_version="3.10",
-    apt_packages=["git"],
-    env={
-        "DS_BUILD_OPS": "1",
-        "DS_BUILD_AIO": "0",
-        "DS_BUILD_SPARSE_ATTN": "0",
-    },
-    packages=[
-        "accelerate",
-        # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
-        "'bitsandbytes==0.37.2'",
-        "datasets",
-        "'deepspeed>=0.8.3,<0.9'",
-        "huggingface_hub",
-        "loralib",
-        "numpy",
-        "pyyaml",
-        "rouge_score",
-        "fire",
-        "openai",
-        "'transformers[torch,deepspeed]>=4.28.1,<5'",
-        "tokenizers",
-        "torch",
-        "sentencepiece",
-        "wandb",
-        "flytekit",
-        "flytekitplugins-kfpytorch",
-        "'git+https://github.com/huggingface/peft.git'",
-    ],
-    registry="ghcr.io/unionai-oss",
-)
+container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0"
 
 
 @flytekit.task(
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
-    container_image=finetuning_image_spec,
+    container_image=container_image,
     pod_template=flytekit.PodTemplate(
         primary_container_name="unionai-llm-fine-tuning",
         pod_spec=V1PodSpec(
@@ -307,14 +277,14 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     if len(config.wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = config.wandb_log_model
 
-    model = LlamaForCausalLM.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
         load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device_map,
     )
 
-    tokenizer = LlamaTokenizer.from_pretrained(config.base_model)
+    tokenizer = AutoTokenizer.from_pretrained(config.base_model)
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
@@ -381,8 +351,8 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         model.is_parallelizable = True
         model.model_parallel = True
 
-    eval_steps = 20 if config.debug_mode else 200
-    save_steps = 20 if config.debug_mode else 200
+    eval_steps = 20 if config.debug_mode else config.eval_steps
+    save_steps = 20 if config.debug_mode else config.save_steps
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
