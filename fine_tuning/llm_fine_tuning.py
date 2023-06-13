@@ -582,8 +582,8 @@ MODEL_CARD_TEMPLATE = """
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.3",
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    cache_version="0.0.4",
+    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="32Gi"),
     container_image=container_image,
     secret_requests=[
         Secret(

@@ -1,20 +1,16 @@
 import json
 import os
 import sys
-from functools import partial
-from io import BytesIO
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 
 import flytekit
-import huggingface_hub as hh
 import torch
 import torch.nn as nn
 import transformers
-import yaml
 from flytekit import Secret
 from transformers import (
     TrainerCallback,
@@ -100,20 +96,6 @@ class TrainerConfig:
     debug_mode: bool = False
     debug_train_data_size: int = 1024
 
-
-@dataclass_json
-@dataclass
-class HuggingFaceModelCard:
-    language: List[str]
-    license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
-    tags: List[str]
-
-@dataclass_json
-@dataclass
-class PublishConfig:
-    repo_id: str
-    readme: Optional[str] = None
-    model_card: Optional[HuggingFaceModelCard] = None
 
 
 class SavePeftModelCallback(TrainerCallback):
@@ -216,29 +198,12 @@ class TokenizerHelper:
         return tokenized_full_prompt
 
 
-def custom_prepare_model_for_int8_training(model: nn.Module):
-    for param in model.parameters():
-        param.requires_grad = False  # freeze the model - train adapters later
-        if param.ndim == 1:
-            # cast the small parameters (e.g. layernorm) to fp32 for stability
-            param.data = param.data.to(torch.float32)
-
-        model.gradient_checkpointing_enable()  # reduce number of stored activations
-        model.enable_input_require_grads()
-
-    class CastOutputToFloat(nn.Sequential):
-        def forward(self, x): return super().forward(x).to(torch.float32)
-
-    model.lm_head = CastOutputToFloat(model.lm_head)
-    return model
-
-
 container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0"
 
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.2",
+    cache_version="0.0.6",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
     container_image=container_image,
@@ -411,20 +376,23 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
-        callbacks=[SavePeftModelCallback],
+        # callbacks=[SavePeftModelCallback],
     )
 
-    old_state_dict = model.state_dict
-    model.state_dict = (
-        lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
-    ).__get__(model, type(model))
+    # old_state_dict = model.state_dict
+    # model.state_dict = (
+    #     lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
+    # ).__get__(model, type(model))
 
-    if torch.__version__ >= "2" and sys.platform != "win32":
-        model = torch.compile(model)
+    # if torch.__version__ >= "2" and sys.platform != "win32":
+    #     model = torch.compile(model)
 
     logger.info("Starting training run")
     trainer.save_model(output_dir=config.output_dir)
     model.save_pretrained(config.output_dir)
+    with (Path(config.output_dir) / "flyte_training_config.json").open("w") as f:
+        json.dump(config.to_dict(), f)
+
     return flytekit.directory.FlyteDirectory(path=config.output_dir)
 
 
@@ -435,59 +403,6 @@ MODEL_CARD_TEMPLATE = """
 
 {readme_content}
 """.strip()
-
-
-
-@flytekit.task(
-    retries=3,
-    cache=True,
-    cache_version="0.0.1",
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
-    container_image=container_image,
-    secret_requests=[
-        Secret(
-            group=SECRET_GROUP,
-            key=HF_HUB_API_SECRET_KEY,
-            mount_requirement=Secret.MountType.FILE,
-        )
-    ]
-)
-def save_to_hf_hub(
-    model_dir: flytekit.directory.FlyteDirectory,
-    publish_config: PublishConfig,
-) -> str:
-    # make sure the file can be downloaded
-    model_dir.download()
-    root = Path(model_dir.path)
-    hh.login(
-        token=flytekit.current_context().secrets.get(
-            SECRET_GROUP,
-            HF_HUB_API_SECRET_KEY,
-        )
-    )
-    api = hh.HfApi()
-    repo_id = publish_config.repo_id
-    repo_url = api.create_repo(repo_id, exist_ok=True)
-
-    if publish_config.readme is not None:
-        model_card_dict = publish_config.model_card.to_dict()
-
-        readme_str = MODEL_CARD_TEMPLATE.format(
-            model_card_content=yaml.dump(model_card_dict),
-            readme_content=publish_config.readme,
-        )
-        api.upload_file(
-            path_or_fileobj=BytesIO(readme_str.encode()),
-            path_in_repo="README.md",
-            repo_id=repo_id,
-        )
-
-    api.upload_folder(
-        repo_id=repo_id,
-        folder_path=root,
-        ignore_patterns=["flyte-*", "models--*"]
-    )
-    return str(repo_url)
 
 
 @flytekit.workflow
