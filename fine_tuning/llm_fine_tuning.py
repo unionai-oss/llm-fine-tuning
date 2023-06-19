@@ -365,7 +365,8 @@ finetuning_pod_template = flytekit.PodTemplate(
 
 
 @flytekit.task(
-    requests=Resources(mem="8Gi", cpu="8", ephemeral_storage="8Gi"),
+    requests=Resources(mem="30Gi", cpu="16", ephemeral_storage="64Gi"),
+    interruptible=True,
     disable_deck=False,
     container_image=container_image,
     cache=True,
