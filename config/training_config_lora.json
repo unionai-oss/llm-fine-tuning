@@ -2,7 +2,7 @@
     "base_model": "togethercomputer/RedPajama-INCITE-7B-Chat",
     "data_path":"yahma/alpaca-cleaned",
     "num_epochs": 1,
-    "max_steps": 50,
+    "max_steps": 100,
     "batch_size": 16,
     "micro_batch_size": 1,
     "learning_rate": 1e-4,

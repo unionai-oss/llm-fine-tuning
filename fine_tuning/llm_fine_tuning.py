@@ -343,14 +343,12 @@ def make_causal_lm_data_module(
     )
 
 
-container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0"
 finetuning_pod_template = flytekit.PodTemplate(
     primary_container_name="unionai-llm-fine-tuning",
     pod_spec=V1PodSpec(
         containers=[
             V1Container(
                 name="unionai-llm-fine-tuning",
-                image=container_image,
                 volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
             )
         ],
@@ -365,10 +363,8 @@ finetuning_pod_template = flytekit.PodTemplate(
 
 
 @flytekit.task(
-    requests=Resources(mem="30Gi", cpu="16", ephemeral_storage="64Gi"),
-    interruptible=True,
+    requests=Resources(mem="8Gi", cpu="8", ephemeral_storage="8Gi"),
     disable_deck=False,
-    container_image=container_image,
     cache=True,
     cache_version="0.0.0",
 )
@@ -388,10 +384,9 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.4",
+    cache_version="0.0.5",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
-    container_image=container_image,
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
@@ -529,7 +524,6 @@ def train(
     cache=True,
     cache_version="0.0.3",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
-    container_image=container_image,
 )
 def quantize_model(
     config: TrainerConfig,
@@ -584,8 +578,7 @@ MODEL_CARD_TEMPLATE = """
     retries=3,
     cache=True,
     cache_version="0.0.4",
-    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="32Gi"),
-    container_image=container_image,
+    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="100Gi"),
     secret_requests=[
         Secret(
             group=SECRET_GROUP,
@@ -642,13 +635,6 @@ def save_to_hf_hub(
         ignore_patterns=["flyte-*", "models--*"]
     )
     return str(repo_url)
-
-
-@flytekit.task
-def evaluate_model(
-    lm_eval_harnes_config: LMEvalHarnessConfig
-):
-    ...
 
 
 @flytekit.workflow

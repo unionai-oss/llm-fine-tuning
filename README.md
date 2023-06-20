@@ -19,6 +19,7 @@ export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own fl
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_SDK_LOGGING_LEVEL=100
 export FLYTE_PROJECT=llm-fine-tuning
+export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0
 ```
 
 ## Container Build
@@ -30,11 +31,6 @@ docker login ghcr.io
 gitsha=$(git rev-parse HEAD)
 image_name=$REGISTRY/unionai-llm-fine-tuning
 docker build . -t $image_name:$gitsha -f Dockerfile
-docker push $image_name:$gitsha
-```
-
-```bash
-docker build . -t $image_name:$gitsha -f Dockerfile.tmp
 docker push $image_name:$gitsha
 ```
 
@@ -70,6 +66,7 @@ To run on flyte:
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
+    --image $IMAGE \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config.json \
     --publish_config config/publish_config.json \
@@ -84,41 +81,8 @@ The following instructions are for fine-tuning using [LoRA](https://arxiv.org/ab
 pyflyte --config $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
+    --image $IMAGE \
     fine_tuning/llm_fine_tuning_lora.py fine_tune \
     --config config/training_config_lora.json \
     --publish_config config/publish_config_lora.json
-```
-
-```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --copy-all \
-    --project $FLYTE_PROJECT \
-    fine_tuning/llm_fine_tuning_lora.py train \
-    --config config/training_config_lora.json
-```
-
-### Push Fine-tuned Model to Huggingface Hub
-
-#### Configuration
-
-- In the `train.py` script, replace the `HUGGINGFACE_TOKEN: <huggingface_token>`
-  environment variable in the `save_to_hf_hub` task and use your own key.
-
-```bash
-export HUGGINGFACE_USERNAME=...
-export HUGGINGFACE_REPO_NAME=...
-export REMOTE_MODEL_PATH=...
-```
-
-Pushing trained model to huggingface hub:
-
-```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
-    --image $REGISTRY/unionai-llm-fine-tuning:latest \
-    --project $FLYTE_PROJECT \
-    llm_fine_tuning.py save_to_hf_hub \
-    --model_dir $REMOTE_MODEL_PATH \
-    --repo_id $HUGGINGFACE_USERNAME/$HUGGINGFACE_REPO_NAME \
-    --model_card "$(cat config/model_card.json)" \
-    --readme "# My Fine-tuned Model"
 ```

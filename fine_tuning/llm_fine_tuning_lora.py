@@ -198,15 +198,13 @@ class TokenizerHelper:
         return tokenized_full_prompt
 
 
-container_image = "ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0"
 
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.6",
+    cache_version="0.0.7",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
-    container_image=container_image,
     pod_template=flytekit.PodTemplate(
         primary_container_name="unionai-llm-fine-tuning",
         pod_spec=V1PodSpec(
@@ -376,16 +374,16 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
-        # callbacks=[SavePeftModelCallback],
+        callbacks=[SavePeftModelCallback],
     )
 
-    # old_state_dict = model.state_dict
-    # model.state_dict = (
-    #     lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
-    # ).__get__(model, type(model))
+    old_state_dict = model.state_dict
+    model.state_dict = (
+        lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
+    ).__get__(model, type(model))
 
-    # if torch.__version__ >= "2" and sys.platform != "win32":
-    #     model = torch.compile(model)
+    if torch.__version__ >= "2" and sys.platform != "win32":
+        model = torch.compile(model)
 
     logger.info("Starting training run")
     trainer.save_model(output_dir=config.output_dir)
