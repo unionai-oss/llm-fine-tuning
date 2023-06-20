@@ -55,15 +55,24 @@ The following instructions are for full fine-tuning of a pre-trained model.
 
 #### Configuration
 
-- Update the arguments in the `.json` files in the `config` directory. These
-  will be used to inform which model, dataset, and training arguments are used.
-- In the `train.py` script, replace the `WANDB_API_KEY: <wandb_api_key>`
-  environment variable in the `train` task and use your own key.
+Update the arguments in the `.json` files in the `config` directory. These
+will be used to inform which model, dataset, and training arguments are used.
+
+Run locally:
+
+```bash
+pyflyte run \
+    fine_tuning/llm_fine_tuning.py fine_tune \
+    --config config/training_config_local.json \
+    --publish_config config/publish_config.json \
+    --ds_config "{}"
+```
 
 To run on flyte:
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -78,7 +87,8 @@ pyflyte --config $FLYTECTL_CONFIG run --remote \
 The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG run --remote \
+pyflyte --config $FLYTECTL_CONFIG\
+    run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \

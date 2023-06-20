@@ -384,7 +384,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.5",
+    cache_version="0.0.4",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     pod_template=finetuning_pod_template,
@@ -406,16 +406,25 @@ def train(
     ds_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
-    os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
-        SECRET_GROUP,
-        WANDB_API_SECRET_KEY,
-    )
-    os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
-    if config.wandb_project:
-        os.environ["WANDB_PROJECT"] = config.wandb_project
-    use_wandb = len(config.wandb_project) > 0 or (
-        "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
-    )
+
+    try:
+        os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            WANDB_API_SECRET_KEY,
+        )
+    except ValueError:
+        pass
+
+    use_wandb = False
+    fp16 = False
+    if "WANDB_API_KEY" in os.environ:
+        fp16 = True
+        os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+        if config.wandb_project:
+            os.environ["WANDB_PROJECT"] = config.wandb_project
+        use_wandb = len(config.wandb_project) > 0 or (
+            "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
+        )
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
@@ -446,7 +455,7 @@ def train(
         logging_steps=10,
         output_dir="/tmp",
         deepspeed=ds_config,
-        fp16=True,
+        fp16=fp16,
     )
 
     model = transformers.AutoModelForCausalLM.from_pretrained(

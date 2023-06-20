@@ -1,9 +1,9 @@
 {
-    "base_model": "togethercomputer/RedPajama-INCITE-Base-3B-v1",
+    "base_model": "facebook/opt-125m",
     "data_path":"wikipedia",
     "data_name": "20220301.simple",
     "num_epochs": 1,
-    "max_steps": 500,
+    "max_steps": 10,
     "batch_size": 16,
     "micro_batch_size": 1
 }
