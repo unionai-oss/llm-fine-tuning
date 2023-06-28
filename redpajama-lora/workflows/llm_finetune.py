@@ -63,7 +63,7 @@ class SavePeftModelCallback(TrainerCallback):
 
 
 def generate_prompt(input, output=""):
-    return f"""As an advanced chatbot, you enjoy assisting users on a community Slack platform. Write a response that appropriately answers the query. 
+    return f"""As an advanced chatbot, you enjoy assisting users on a community Slack platform. Write a detailed response that appropriately answers the query. 
 
 ### Query:
 {input}
@@ -75,8 +75,8 @@ def generate_prompt(input, output=""):
 @dataclass_json
 @dataclass
 class TrainerConfig:
-    base_model: str = "togethercomputer/RedPajama-INCITE-Chat-7B-v0.1"
-    data_path: str = "Samhita/flyte-slack-data"
+    base_model: str = "togethercomputer/RedPajama-INCITE-7B-Chat"
+    data_path: str = "unionai/flyte-slack-data"
     output_dir: str = "./lora-redpajama"
     device_map: str = "auto"
     batch_size: int = 128

@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 
 def generate_prompt(input, output=""):
-    return f"""As an advanced chatbot, you enjoy assisting users on a community Slack platform. Write a response that appropriately answers the query. Give a detailed explanation at all times.
+    return f"""As an advanced chatbot, you enjoy assisting users on a community Slack platform. Write a detailed response that appropriately answers the query.
 
 ### Query:
 {input}
@@ -125,8 +125,8 @@ def inference_wf(
     num_beams: int = 4,
     max_new_tokens: int = 128,
     load_8bit: bool = True,
-    base_model: str = "togethercomputer/RedPajama-INCITE-Chat-7B-v0.1",
-    lora_weights: str = "Samhita/redpajama-lora-finetuned-T4",
+    base_model: str = "togethercomputer/RedPajama-INCITE-7B-Chat",
+    lora_weights: str = "unionai/redpajama-lora-finetuned-T4",
 ) -> str:
     return generate_output(
         input=input,

@@ -14,7 +14,7 @@ SECRET_GROUP = "hf"
 SECRET_NAME = "hf-token"
 
 
-@task(cache=True, cache_version="1.0")
+@task(cache=True, cache_version="2.0")
 def get_channel_dirs(parent_dir: str) -> List[str]:
     return glob(parent_dir + "/*/")
 
@@ -29,7 +29,7 @@ def replace_user_id_with_name(text, user_mapping):
     return text
 
 
-@task(cache=True, cache_version="1.0")
+@task(cache=True, cache_version="2.0")
 def question_response_pairs(channel_dir: str) -> Optional[FlyteFile]:
     threads = []
     thread_ts_list_index_pairs = {}
@@ -110,12 +110,13 @@ def question_response_pairs(channel_dir: str) -> Optional[FlyteFile]:
                 output_messages[user] += f"{output_message[1]}\n"
 
         if input_messages and output_messages:
-            pairs.append(
-                {
-                    "input": list(input_messages.values())[0],
-                    "output": list(output_messages.values())[0],
-                }
-            )
+            if len(list(output_messages.values())[0]) > 180:
+                pairs.append(
+                    {
+                        "input": list(input_messages.values())[0],
+                        "output": list(output_messages.values())[0],
+                    }
+                )
     if pairs:
         json_file_name = os.path.join(
             flytekit.current_context().working_directory,
