@@ -8,7 +8,8 @@ mwparserfromhell
 pandera
 pyyaml
 sentencepiece
-transformers[torch,deepspeed]==4.31.0
+# transformers[torch,deepspeed]==4.31.0
+git+https://github.com/huggingface/transformers.git@master#egg=transformers[torch,deepspeed]
 tokenizers==0.13.3
 torch==2.0.1
 wandb

@@ -44,10 +44,11 @@ from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_int8_training,
+    prepare_model_for_kbit_training,
     get_peft_model_state_dict,
     set_peft_model_state_dict,
 )
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
 logging.set_verbosity_debug()
@@ -202,7 +203,7 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.11",
+    cache_version="0.0.10",
     task_config=Elastic(nnodes=1),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     pod_template=flytekit.PodTemplate(
@@ -280,11 +281,18 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     if len(config.wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = config.wandb_log_model
 
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
         load_in_8bit=True,
         torch_dtype=torch.float16,
-        device_map="auto",
+        device_map=device_map,
+        quantization_config=bnb_config,
         use_auth_token=hf_auth_token,
     )
 
@@ -295,12 +303,13 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
-    model = prepare_model_for_int8_training(model)
+    model = prepare_model_for_kbit_training(model)
     model = get_peft_model(
         model,
-            LoraConfig(
+        LoraConfig(
             r=config.lora_r,
             lora_alpha=config.lora_alpha,
+            lora_dropout=0.05,
             target_modules=config.lora_target_modules,
             lora_dropout=config.lora_dropout,
             bias="none",
