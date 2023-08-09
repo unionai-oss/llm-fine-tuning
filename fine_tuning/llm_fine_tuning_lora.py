@@ -202,9 +202,9 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.7",
+    cache_version="0.0.10",
     task_config=Elastic(nnodes=1),
-    requests=Resources(mem="120Gi", cpu="60", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     pod_template=flytekit.PodTemplate(
         primary_container_name="unionai-llm-fine-tuning",
         pod_spec=V1PodSpec(
@@ -225,13 +225,19 @@ class TokenizerHelper:
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
+        "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python",
     },
     secret_requests=[
         Secret(
             group=SECRET_GROUP,
             key=WANDB_API_SECRET_KEY,
             mount_requirement=Secret.MountType.FILE,
-        )
+        ),
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
     ],
 )
 def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
@@ -241,6 +247,15 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
         SECRET_GROUP, WANDB_API_SECRET_KEY
     )
+
+    try:
+        hf_auth_token = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            HF_HUB_API_SECRET_KEY,
+        )
+    except Exception:
+        hf_auth_token = None
+
     wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID", "local")
     os.environ["WANDB_RUN_ID"] = wandb_run_name
 
@@ -270,9 +285,13 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device_map,
+        use_auth_token=hf_auth_token,
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(config.base_model)
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.base_model,
+        use_auth_token=hf_auth_token,
+    )
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
@@ -386,6 +405,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         model = torch.compile(model)
 
     logger.info("Starting training run")
+    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint)
     trainer.save_model(output_dir=config.output_dir)
     model.save_pretrained(config.output_dir)
     with (Path(config.output_dir) / "flyte_training_config.json").open("w") as f:

@@ -28,7 +28,7 @@ Build a base image that has transformers and deepspeed pre-built.
 
 ```bash
 docker login ghcr.io
-gitsha=$(git rev-parse HEAD)
+gitsha=$(git rev-parse --short=7 HEAD)
 image_name=$REGISTRY/unionai-llm-fine-tuning
 docker build . -t $image_name:$gitsha -f Dockerfile
 docker push $image_name:$gitsha
@@ -87,7 +87,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG\
+pyflyte --config $FLYTECTL_CONFIG \
     run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
@@ -95,4 +95,21 @@ pyflyte --config $FLYTECTL_CONFIG\
     fine_tuning/llm_fine_tuning_lora.py fine_tune \
     --config config/training_config_lora.json \
     --publish_config config/publish_config_lora.json
+```
+
+## Llama2 Fine-tuning
+
+### Fine-tuning with LoRA
+
+The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    fine_tuning/llm_fine_tuning_lora.py fine_tune \
+    --config config/training_config_llama2_lora.json \
+    --publish_config config/publish_config_llama2_lora.json
 ```

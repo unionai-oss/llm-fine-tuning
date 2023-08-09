@@ -1,20 +1,20 @@
 apache_beam
-accelerate==0.20.1
-bitsandbytes==0.37.2  # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
-datasets==2.12.0
-deepspeed==0.8.3
+accelerate==0.21.0
+bitsandbytes==0.41.1  # pin due to https://github.com/TimDettmers/bitsandbytes/issues/324
+datasets==2.14.4
+deepspeed==0.10.0
 huggingface_hub==0.15.1
 mwparserfromhell
 pandera
 pyyaml
 sentencepiece
-transformers[torch,deepspeed]==4.29.2
+transformers[torch,deepspeed]==4.31.0
 tokenizers==0.13.3
 torch==2.0.1
 wandb
-flytekit==1.6.2
-flytekitplugins-envd==1.6.2
-flytekitplugins-kfpytorch==1.6.2
-flytekitplugins-huggingface==1.6.2
-flytekitplugins-deck-standard==1.6.2
+flytekit==1.8.3
+flytekitplugins-envd==1.8.3
+flytekitplugins-kfpytorch==1.8.3
+flytekitplugins-huggingface==1.8.3
+flytekitplugins-deck-standard==1.8.3
 git+https://github.com/huggingface/peft.git

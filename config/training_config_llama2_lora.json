@@ -1,5 +1,5 @@
 {
-    "base_model": "togethercomputer/RedPajama-INCITE-7B-Base",
+    "base_model": "meta-llama/Llama-2-13b-hf",
     "data_path":"yahma/alpaca-cleaned",
     "num_epochs": 1,
     "max_steps": 250,
@@ -12,7 +12,7 @@
     "lora_alpha": 16,
     "lora_dropout": 0.05,
     "val_set_size": 0,
-    "lora_target_modules": ["query_key_value"],
+    "lora_target_modules": ["q_proj", "k_proj", "v_proj"],
     "train_on_inputs": true,
     "group_by_length": true,
     "resume_from_checkpoint": null,

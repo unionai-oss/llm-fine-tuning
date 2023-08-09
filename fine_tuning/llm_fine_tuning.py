@@ -397,7 +397,12 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
             group=SECRET_GROUP,
             key=WANDB_API_SECRET_KEY,
             mount_requirement=Secret.MountType.FILE,
-        )
+        ),
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
     ],
 )
 def train(
@@ -414,6 +419,14 @@ def train(
         )
     except ValueError:
         pass
+
+    try:
+        hf_auth_token = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            HF_HUB_API_SECRET_KEY,
+        )
+    except Exception:
+        hf_auth_token = None
 
     use_wandb = False
     fp16 = False
@@ -461,6 +474,7 @@ def train(
     model = transformers.AutoModelForCausalLM.from_pretrained(
         config.base_model,
         cache_dir=config.cache_dir,
+        use_auth_token=hf_auth_token,
     )
 
     tokenizer_kwargs = dict(
@@ -468,6 +482,7 @@ def train(
         model_max_length=config.model_max_length,
         padding_side="right",
         pad_token=DEFAULT_PAD_TOKEN,
+        use_auth_token=hf_auth_token,
     )
 
     # Try using fast version of the model's tokenizer, if available.
