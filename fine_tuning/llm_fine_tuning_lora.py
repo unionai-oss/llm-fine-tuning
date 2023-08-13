@@ -44,19 +44,26 @@ from peft import (
     LoraConfig,
     get_peft_model,
     prepare_model_for_int8_training,
+    prepare_model_for_kbit_training,
     get_peft_model_state_dict,
     set_peft_model_state_dict,
 )
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
 logging.set_verbosity_debug()
 logger = logging.get_logger("transformers")
 
 
+# Union Cloud Tenants
 SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
 WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
 HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+
+# Flyte Development Tenant
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
 @dataclass_json
@@ -111,7 +118,7 @@ class SavePeftModelCallback(TrainerCallback):
         kwargs["model"].save_pretrained(peft_model_path)
 
         pytorch_model_path = os.path.join(checkpoint_folder, "pytorch_model.bin")
-        if int(os.environ.get("LOCAL_RANK")) == 0:
+        if int(os.environ.get("LOCAL_RANK", 0)) == 0:
             if os.path.exists(pytorch_model_path):
                 os.remove(pytorch_model_path)
         return control
@@ -202,9 +209,9 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.11",
-    task_config=Elastic(nnodes=1),
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    cache_version="0.0.14",
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
+    # task_config=Elastic(nnodes=1),
     pod_template=flytekit.PodTemplate(
         primary_container_name="unionai-llm-fine-tuning",
         pod_spec=V1PodSpec(
@@ -242,7 +249,7 @@ class TokenizerHelper:
 )
 def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-        print(f"Training Alpaca-LoRA model with params:\n{config}")
+        logger.info(f"Training Alpaca-LoRA model with params:\n{config}")
 
     os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
         SECRET_GROUP, WANDB_API_SECRET_KEY
@@ -262,10 +269,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    ddp = world_size != 1
-    if ddp:
-        device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
-        gradient_accumulation_steps = gradient_accumulation_steps // world_size
+    logger.info(f"WORLD_SIZE: {world_size}")
 
     # Check if parameter passed or if set within environ
     use_wandb = len(config.wandb_project) > 0 or (
@@ -284,8 +288,8 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         config.base_model,
         load_in_8bit=True,
         torch_dtype=torch.float16,
-        device_map="auto",
-        use_auth_token=hf_auth_token,
+        device_map=device_map,
+        use_auth_token=hf_auth_token, 
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -295,7 +299,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
-    model = prepare_model_for_int8_training(model)
+    model = prepare_model_for_kbit_training(model)
     model = get_peft_model(
         model,
             LoraConfig(
@@ -353,11 +357,6 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         train_data = data["train"].shuffle().map(tokenizer_helper.generate_and_tokenize_prompt)
         val_data = None
 
-    if not ddp and torch.cuda.device_count() > 1:
-        # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
-        model.is_parallelizable = True
-        model.model_parallel = True
-
     eval_steps = 20 if config.debug_mode else config.eval_steps
     save_steps = 20 if config.debug_mode else config.save_steps
     trainer = transformers.Trainer(
@@ -376,8 +375,9 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
             lr_scheduler_type=config.lr_scheduler_type,
             fp16=True,
             half_precision_backend="auto",
-            logging_steps=20,
-            optim="adamw_bnb_8bit",
+            logging_steps=1,
+            optim="adamw_torch",
+            # optim="adamw_bnb_8bit",
             evaluation_strategy="steps" if config.val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=eval_steps if config.val_set_size > 0 else None,
@@ -385,7 +385,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
             output_dir=config.output_dir,
             save_total_limit=1,
             load_best_model_at_end=True if config.val_set_size > 0 else False,
-            ddp_find_unused_parameters=False if ddp else None,
+            # ddp_find_unused_parameters=False if ddp else None,
             group_by_length=config.group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
@@ -393,7 +393,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
-        callbacks=[SavePeftModelCallback],
+        # callbacks=[SavePeftModelCallback],
     )
 
     old_state_dict = model.state_dict
@@ -412,15 +412,6 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         json.dump(config.to_dict(), f)
 
     return flytekit.directory.FlyteDirectory(path=config.output_dir)
-
-
-MODEL_CARD_TEMPLATE = """
----
-{model_card_content}
----
-
-{readme_content}
-""".strip()
 
 
 @flytekit.workflow
