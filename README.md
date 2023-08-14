@@ -132,9 +132,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --publish_config config/publish_config_llama2_lora.json
 ```
 
-### Fine-tuning with 4-bit LoRA
-
-The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
+### Fine-tuning with QLoRA
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -142,7 +140,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
-    fine_tuning/llm_fine_tuning_4bit_lora.py fine_tune \
+    fine_tuning/llm_fine_tuning_qlora.py fine_tune \
     --config config/training_config_llama2_qlora.json \
     --publish_config config/publish_config_llama2_qlora.json
 ```

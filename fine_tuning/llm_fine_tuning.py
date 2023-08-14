@@ -46,14 +46,14 @@ class WikipediaDataset(pa.DataFrameModel):
 
 
 # Union Cloud Tenants
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
 # Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -392,25 +392,31 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     retries=3,
     cache=True,
     cache_version="0.0.5",
-    task_config=Elastic(nnodes=2, rdzv_configs={"timeout": 1200, "join_timeout": 900}),
+    task_config=Elastic(
+        nnodes=2,
+        nproc_per_node=6,
+        rdzv_configs={"timeout": 1200, "join_timeout": 900}
+    ),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
+        "WANDB_API_KEY": "8524642eb2070c679d42832d25c4a8dabeddd2ac",
+        "HF_API_TOKEN": "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",
         "TRANSFORMERS_CACHE": "/tmp",
     },
-    secret_requests=[
-        Secret(
-            group=SECRET_GROUP,
-            key=WANDB_API_SECRET_KEY,
-            mount_requirement=Secret.MountType.FILE,
-        ),
-        Secret(
-            group=SECRET_GROUP,
-            key=HF_HUB_API_SECRET_KEY,
-            mount_requirement=Secret.MountType.FILE,
-        ),
-    ],
+    # secret_requests=[
+    #     Secret(
+    #         group=SECRET_GROUP,
+    #         key=WANDB_API_SECRET_KEY,
+    #         mount_requirement=Secret.MountType.FILE,
+    #     ),
+    #     Secret(
+    #         group=SECRET_GROUP,
+    #         key=HF_HUB_API_SECRET_KEY,
+    #         mount_requirement=Secret.MountType.FILE,
+    #     ),
+    # ],
 )
 def train(
     config: TrainerConfig,
@@ -419,18 +425,19 @@ def train(
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
 
-    os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
-        SECRET_GROUP, WANDB_API_SECRET_KEY
-    )
-    print(f"SET WANDB API KEY {os.environ['WANDB_API_KEY']}")
+    # os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
+    #     SECRET_GROUP, WANDB_API_SECRET_KEY
+    # )
+    # print(f"SET WANDB API KEY {os.environ['WANDB_API_KEY']}")
 
-    try:
-        hf_auth_token = flytekit.current_context().secrets.get(
-            SECRET_GROUP,
-            HF_HUB_API_SECRET_KEY,
-        )
-    except Exception:
-        hf_auth_token = None
+    hf_auth_token = os.environ["HF_API_TOKEN"]
+    # try:
+    #     hf_auth_token = flytekit.current_context().secrets.get(
+    #         SECRET_GROUP,
+    #         HF_HUB_API_SECRET_KEY,
+    #     )
+    # except Exception:
+    #     hf_auth_token = None
 
     use_wandb = False
     if "WANDB_API_KEY" in os.environ:
@@ -441,8 +448,15 @@ def train(
             "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
         )
 
+    # device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
+    logging.info(f"WORLD_SIZE: {world_size}")
     ddp = world_size != 1
+    # gradient_accumulation_steps = config.batch_size // config.micro_batch_size
+    # if ddp:
+    #     device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
+    #     gradient_accumulation_steps = gradient_accumulation_steps // world_size
+
     gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     eval_steps = 10 if config.debug_mode else 200
     save_steps = 10 if config.debug_mode else 200
@@ -561,6 +575,7 @@ def quantize_model(
     device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
+    gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     if ddp:
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
