@@ -12,9 +12,9 @@ git+https://github.com/huggingface/transformers.git@main#egg=transformers[torch,
 tokenizers==0.13.3
 torch==2.0.1
 wandb
-flytekit==1.8.3
-flytekitplugins-envd==1.8.3
-flytekitplugins-kfpytorch==1.8.3
-flytekitplugins-huggingface==1.8.3
-flytekitplugins-deck-standard==1.8.3
+flytekit==1.9.0
+flytekitplugins-envd==1.9.0
+flytekitplugins-kfpytorch==1.9.0
+flytekitplugins-huggingface==1.9.0
+flytekitplugins-deck-standard==1.9.0
 git+https://github.com/huggingface/peft.git
