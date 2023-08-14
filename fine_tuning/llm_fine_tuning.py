@@ -392,7 +392,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     retries=3,
     cache=True,
     cache_version="0.0.5",
-    task_config=Elastic(nnodes=2),
+    task_config=Elastic(nnodes=2, rdzv_configs={"timeout": 1200, "join_timeout": 900}),
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
     pod_template=finetuning_pod_template,
     environment={

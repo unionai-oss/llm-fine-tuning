@@ -289,6 +289,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device_map,
+        # device_map={"": 0},
         use_auth_token=hf_auth_token, 
     )
 

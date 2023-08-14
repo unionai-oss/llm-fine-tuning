@@ -290,16 +290,20 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
+        llm_int8_threshold=6.0,
+        llm_int8_skip_modules=None,
+        llm_int8_enable_fp32_cpu_offload=True,
+        llm_int8_has_fp16_weight=False,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16
+        bnb_4bit_compute_dtype=torch.bfloat16,
     )
 
     model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
         load_in_4bit=True,
-        torch_dtype=torch.float16,
-        device_map=device_map,
+        torch_dtype=torch.bfloat16,
+        # device_map=device_map,
         max_memory={i: '46000MB' for i in range(torch.cuda.device_count())},
         quantization_config=bnb_config,
         use_auth_token=hf_auth_token, 

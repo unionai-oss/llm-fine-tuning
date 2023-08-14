@@ -1,9 +1,9 @@
 {
-    "base_model": "meta-llama/Llama-2-13b-hf",
+    "base_model": "meta-llama/Llama-2-7b-hf",
     "data_path":"yahma/alpaca-cleaned",
     "num_epochs": 1,
     "max_steps": 300,
-    "batch_size": 32,
+    "batch_size": 16,
     "micro_batch_size": 8,
     "learning_rate": 3e-4,
     "cutoff_len": 512,
