@@ -24,6 +24,7 @@ export FLYTE_PROJECT=llm-fine-tuning
 # export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:d98ba52
 # export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:718398b
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
+# export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:505c34d
 ```
 
 ## Container Build
@@ -114,7 +115,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config_llama2.json \
     --publish_config config/publish_config_llama2.json \
-    --ds_config config/zero_config_ds.json
+    --deepspeed_config config/zero_config_ds.json
 ```
 
 ### Fine-tuning with 8-bit LoRA
