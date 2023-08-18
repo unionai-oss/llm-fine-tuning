@@ -9,7 +9,6 @@ from dataclasses_json import dataclass_json
 
 import flytekit
 import torch
-import torch.nn as nn
 import transformers
 from flytekit import Secret
 from transformers import (
@@ -23,21 +22,9 @@ from transformers.utils import logging
 
 from datasets import DatasetDict, load_dataset
 from flytekit import Resources
-from kubernetes.client.models import (
-    V1PodSpec,
-    V1Container,
-    V1Volume,
-    V1EmptyDirVolumeSource,
-    V1VolumeMount,
-)
 
 from fine_tuning.llm_fine_tuning import save_to_hf_hub, PublishConfig
 
-"""
-Unused imports:
-import torch.nn as nn
-import bitsandbytes as bnb
-"""
 
 from peft import (
     LoraConfig,
@@ -54,14 +41,14 @@ logger = logging.get_logger("transformers")
 
 
 # Union Cloud Tenants
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
 # Flyte Development Tenant
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
 @dataclass_json
@@ -207,7 +194,7 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.17",
+    cache_version="0.0.18",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
@@ -383,7 +370,6 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
-        # callbacks=[SavePeftModelCallback],
     )
 
     old_state_dict = model.state_dict

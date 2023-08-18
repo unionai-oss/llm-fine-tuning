@@ -46,15 +46,15 @@ class WikipediaDataset(pa.DataFrameModel):
 
 
 
-# Union Cloud Tenants
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+# # Union Cloud Tenants
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
-# # Flyte Development Tenant
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# Flyte Development Tenant
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -380,10 +380,10 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     dataset = load_dataset(config.data_path, config.data_name)
     pd_dataset = dataset["train"].to_pandas()
 
-    # try:
-    #     WikipediaDataset.validate(pd_dataset, lazy=True)
-    # except pa.errors.SchemaErrors as exc:
-    #     flytekit.Deck("pandera-errors", TopFrameRenderer(max_rows=100).to_html(exc.failure_cases))
+    try:
+        WikipediaDataset.validate(pd_dataset, lazy=True)
+    except pa.errors.SchemaErrors as exc:
+        flytekit.Deck("pandera-errors", TopFrameRenderer(max_rows=100).to_html(exc.failure_cases))
 
     flytekit.Deck("dataset", HuggingFaceDatasetRenderer().to_html(dataset["train"]))
     return StructuredDataset(dataframe=dataset["train"])
@@ -392,9 +392,9 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.5",
+    cache_version="0.0.7",
     task_config=Elastic(
-        nnodes=3,
+        nnodes=2,
         nproc_per_node=8,
         rdzv_configs={"timeout": 1800, "join_timeout": 1800}
     ),
@@ -402,44 +402,21 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
-        "WANDB_API_KEY": "8524642eb2070c679d42832d25c4a8dabeddd2ac",
-        "HF_API_TOKEN": "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",
         "TRANSFORMERS_CACHE": "/tmp",
+        # NOTE: secrets currently do not work with the Elastic plugin, use
+        # environment variable. Make sure you don't check this data into git!
+        # https://github.com/flyteorg/flyte/issues/3907 
+        "WANDB_API_KEY": "...",
+        "HF_API_TOKEN": "...",
     },
-    # secret_requests=[
-    #     Secret(
-    #         group=SECRET_GROUP,
-    #         key=WANDB_API_SECRET_KEY,
-    #         mount_requirement=Secret.MountType.FILE,
-    #     ),
-    #     Secret(
-    #         group=SECRET_GROUP,
-    #         key=HF_HUB_API_SECRET_KEY,
-    #         mount_requirement=Secret.MountType.FILE,
-    #     ),
-    # ],
 )
 def train(
     config: TrainerConfig,
     clm_dataset: Optional[Annotated[StructuredDataset, PARQUET]] = None,
-    ds_config: Optional[dict] = None,
+    deepspeed_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
-
-    # os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
-    #     SECRET_GROUP, WANDB_API_SECRET_KEY
-    # )
-    # print(f"SET WANDB API KEY {os.environ['WANDB_API_KEY']}")
-
     hf_auth_token = os.environ["HF_API_TOKEN"]
-    # try:
-    #     hf_auth_token = flytekit.current_context().secrets.get(
-    #         SECRET_GROUP,
-    #         HF_HUB_API_SECRET_KEY,
-    #     )
-    # except Exception:
-    #     hf_auth_token = None
-
     use_wandb = False
     if "WANDB_API_KEY" in os.environ:
         os.environ["WANDB_RUN_ID"] = os.environ.get("HOSTNAME", "localhost")
@@ -479,9 +456,9 @@ def train(
         group_by_length=config.group_by_length,
         report_to="wandb" if use_wandb else None,
         half_precision_backend="auto",
-        logging_steps=10,
+        logging_steps=1,
         output_dir="/tmp",
-        deepspeed=ds_config,
+        deepspeed=deepspeed_config,
     )
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
@@ -572,11 +549,6 @@ def quantize_model(
     model_dir.download()
 
     hf_auth_token = os.environ["HF_API_TOKEN"]
-    # hf_auth_token = flytekit.current_context().secrets.get(
-    #     SECRET_GROUP,
-    #     HF_HUB_API_SECRET_KEY,
-    # )
-
     device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
@@ -648,10 +620,6 @@ def save_to_hf_hub(
     model_dir.download()
     root = Path(model_dir.path)
     hf_auth_token = os.environ["HF_API_TOKEN"]
-    # hf_auth_token = flytekit.current_context().secrets.get(
-    #     SECRET_GROUP,
-    #     HF_HUB_API_SECRET_KEY,
-    # )
     hh.login(token=hf_auth_token)
     api = hh.HfApi()
     if quantized_8bit:
@@ -693,13 +661,13 @@ def save_to_hf_hub(
 def fine_tune(
     config: TrainerConfig,
     publish_config: PublishConfig,
-    ds_config: Optional[dict] = None,
+    deepspeed_config: Optional[dict] = None,
 ):
     data = get_data(config=config)
     model_dir = train(
         config=config,
         clm_dataset=data,
-        ds_config=ds_config,
+        deepspeed_config=deepspeed_config,
     )
     quantized_model_dir = quantize_model(
         config=config,

@@ -15,8 +15,8 @@ pip install -r requirements.txt
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own flyte config
-# export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace this with your own flyte config
+# export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own flyte config
+export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace this with your own flyte config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_SDK_LOGGING_LEVEL=100
 export FLYTE_PROJECT=llm-fine-tuning
@@ -69,7 +69,7 @@ pyflyte run \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config_local.json \
     --publish_config config/publish_config.json \
-    --ds_config "{}"
+    --deepspeed_config "{}"
 ```
 
 ### Full Fine-tuning on Flyte
@@ -83,7 +83,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config.json \
     --publish_config config/publish_config.json \
-    --ds_config config/zero_config_ds.json
+    --deepspeed_config config/zero_config_ds.json
 ```
 
 ### Fine-tuning with LoRA
