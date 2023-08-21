@@ -46,15 +46,15 @@ class WikipediaDataset(pa.DataFrameModel):
 
 
 
-# # Union Cloud Tenants
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+# Union Cloud Tenants
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
-# Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# # Flyte Development Tenant
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
