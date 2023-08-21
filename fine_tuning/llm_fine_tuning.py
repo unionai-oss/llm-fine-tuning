@@ -406,8 +406,8 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
         # NOTE: secrets currently do not work with the Elastic plugin, use
         # environment variable. Make sure you don't check this data into git!
         # https://github.com/flyteorg/flyte/issues/3907 
-        "WANDB_API_KEY": "8524642eb2070c679d42832d25c4a8dabeddd2ac",
-        "HF_API_TOKEN": "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",
+        "WANDB_API_KEY": "<wandb_api_key>",
+        "HF_API_TOKEN": "<huggingface_api_token>",
     },
 )
 def train(

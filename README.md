@@ -15,16 +15,11 @@ pip install -r requirements.txt
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-# export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own flyte config
-export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace this with your own flyte config
+export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own flyte config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_SDK_LOGGING_LEVEL=100
 export FLYTE_PROJECT=llm-fine-tuning
-# export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:fbba7c0c68b38d3bcd4e11c1b214feb51812a9f0
-# export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:d98ba52
-# export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:718398b
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
-# export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:505c34d
 ```
 
 ## Container Build

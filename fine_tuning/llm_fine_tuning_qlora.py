@@ -11,6 +11,7 @@ import flytekit
 import torch
 import transformers
 from flytekit import Secret
+from flytekitplugins.kfpytorch.task import Elastic
 from transformers import (
     TrainerCallback,
     TrainerControl,
@@ -41,14 +42,14 @@ logger = logging.get_logger("transformers")
 
 
 # Union Cloud Tenants
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
-# Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# # Flyte Development Tenant
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
 @dataclass_json
@@ -194,7 +195,7 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.18",
+    cache_version="0.0.19",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
@@ -267,7 +268,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         device_map=device_map,
         max_memory={i: '46000MB' for i in range(torch.cuda.device_count())},
         quantization_config=bnb_config,
-        use_auth_token=hf_auth_token, 
+        use_auth_token=hf_auth_token,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(

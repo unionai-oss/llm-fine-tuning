@@ -3,7 +3,7 @@
     "data_path":"wikipedia",
     "data_name": "20220301.simple",
     "num_epochs": 1,
-    "max_steps": 500,
-    "batch_size": 16,
+    "max_steps": 100,
+    "batch_size": 4,
     "micro_batch_size": 1
 }
