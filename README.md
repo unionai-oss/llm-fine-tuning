@@ -1,7 +1,7 @@
 # 🤖🔧 LLM Fine Tuning
 
-This repository contains is the Union.ai open source codebase for running LLM
-fine-tuning jobs on Flyte or Union Cloud.
+This repository contains is the [Union.ai](https://union.ai/) open source codebase
+for running LLM fine-tuning jobs on Flyte or Union Cloud.
 
 ## 💻 Setup
 
@@ -70,6 +70,8 @@ LLMs:
 The `config` directory contains `*.json` files which correspond to different
 configurations for fine-tuning. These are used to determine the model, dataset,
 training arguments, and model publishing arguments.
+
+### 👟 Execute Fine-tuning Workflows on the CLI
 
 <details>
 <summary>Local Fine-tuning (facebook/opt-125m)</summary>
