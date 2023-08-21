@@ -13,9 +13,10 @@ import torch
 import transformers
 import yaml
 
+import pandera as pa
+import wandb
 from datasets import DatasetDict, Dataset, load_dataset
 from flytekit import Resources
-import pandera as pa
 from transformers import Trainer, TrainingArguments
 from kubernetes.client.models import (
     V1PodSpec,
@@ -44,9 +45,16 @@ class WikipediaDataset(pa.DataFrameModel):
         coerce = True
 
 
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+
+# # Union Cloud Tenants
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+
+# Flyte Development Tenant
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -363,7 +371,7 @@ finetuning_pod_template = flytekit.PodTemplate(
 
 
 @flytekit.task(
-    requests=Resources(mem="8Gi", cpu="8", ephemeral_storage="8Gi"),
+    requests=Resources(mem="8Gi", cpu="2", ephemeral_storage="8Gi"),
     disable_deck=False,
     cache=True,
     cache_version="0.0.0",
@@ -384,55 +392,51 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.4",
-    task_config=Elastic(nnodes=1),
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    cache_version="0.0.7",
+    task_config=Elastic(
+        nnodes=2,
+        nproc_per_node=8,
+        rdzv_configs={"timeout": 1800, "join_timeout": 1800}
+    ),
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
+        # NOTE: secrets currently do not work with the Elastic plugin, use
+        # environment variable. Make sure you don't check this data into git!
+        # https://github.com/flyteorg/flyte/issues/3907 
+        "WANDB_API_KEY": "<wandb_api_key>",
+        "HF_API_TOKEN": "<huggingface_api_token>",
     },
-    secret_requests=[
-        Secret(
-            group=SECRET_GROUP,
-            key=WANDB_API_SECRET_KEY,
-            mount_requirement=Secret.MountType.FILE,
-        )
-    ],
 )
 def train(
     config: TrainerConfig,
     clm_dataset: Optional[Annotated[StructuredDataset, PARQUET]] = None,
-    ds_config: Optional[dict] = None,
+    deepspeed_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
-
-    try:
-        os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
-            SECRET_GROUP,
-            WANDB_API_SECRET_KEY,
-        )
-    except ValueError:
-        pass
-
+    hf_auth_token = os.environ["HF_API_TOKEN"]
     use_wandb = False
-    fp16 = False
     if "WANDB_API_KEY" in os.environ:
-        fp16 = True
-        os.environ["WANDB_RUN_ID"] = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID")
+        os.environ["WANDB_RUN_ID"] = os.environ.get("HOSTNAME", "localhost")
         if config.wandb_project:
             os.environ["WANDB_PROJECT"] = config.wandb_project
         use_wandb = len(config.wandb_project) > 0 or (
             "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
         )
+        wandb.init()
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
+    logging.info(f"WORLD_SIZE: {world_size}")
     ddp = world_size != 1
+
     gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     eval_steps = 10 if config.debug_mode else 200
     save_steps = 10 if config.debug_mode else 200
     training_args = TrainingArguments(
-        optim="adamw_torch",
+        fp16=True,
+        fp16_full_eval=True,
         learning_rate=config.learning_rate,
         warmup_ratio=config.warmup_ratio,
         weight_decay=config.weight_decay,
@@ -452,15 +456,15 @@ def train(
         group_by_length=config.group_by_length,
         report_to="wandb" if use_wandb else None,
         half_precision_backend="auto",
-        logging_steps=10,
+        logging_steps=1,
         output_dir="/tmp",
-        deepspeed=ds_config,
-        fp16=fp16,
+        deepspeed=deepspeed_config,
     )
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         config.base_model,
         cache_dir=config.cache_dir,
+        use_auth_token=hf_auth_token,
     )
 
     tokenizer_kwargs = dict(
@@ -468,6 +472,7 @@ def train(
         model_max_length=config.model_max_length,
         padding_side="right",
         pad_token=DEFAULT_PAD_TOKEN,
+        use_auth_token=hf_auth_token,
     )
 
     # Try using fast version of the model's tokenizer, if available.
@@ -533,6 +538,9 @@ def train(
     cache=True,
     cache_version="0.0.3",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    environment={
+        "HF_API_TOKEN": "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",
+    },
 )
 def quantize_model(
     config: TrainerConfig,
@@ -540,9 +548,11 @@ def quantize_model(
 ) -> flytekit.directory.FlyteDirectory:
     model_dir.download()
 
+    hf_auth_token = os.environ["HF_API_TOKEN"]
     device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
+    gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     if ddp:
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
@@ -552,6 +562,7 @@ def quantize_model(
         cache_dir=config.cache_dir,
         load_in_8bit=True,
         device_map=device_map,
+        use_auth_token=hf_auth_token,
     )
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         config.base_model,
@@ -560,6 +571,7 @@ def quantize_model(
         model_max_length=config.model_max_length,
         padding_side="right",
         pad_token=DEFAULT_PAD_TOKEN,
+        use_auth_token=hf_auth_token,
     )
     output_dir = "/tmp"
     trainer = Trainer(model=model, tokenizer=tokenizer)
@@ -588,13 +600,16 @@ MODEL_CARD_TEMPLATE = """
     cache=True,
     cache_version="0.0.4",
     requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="100Gi"),
-    secret_requests=[
-        Secret(
-            group=SECRET_GROUP,
-            key=HF_HUB_API_SECRET_KEY,
-            mount_requirement=Secret.MountType.FILE,
-        )
-    ]
+    environment={
+        "HF_API_TOKEN": "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",
+    },
+    # secret_requests=[
+    #     Secret(
+    #         group=SECRET_GROUP,
+    #         key=HF_HUB_API_SECRET_KEY,
+    #         mount_requirement=Secret.MountType.FILE,
+    #     )
+    # ]
 )
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
@@ -604,12 +619,8 @@ def save_to_hf_hub(
     # make sure the file can be downloaded
     model_dir.download()
     root = Path(model_dir.path)
-    hh.login(
-        token=flytekit.current_context().secrets.get(
-            SECRET_GROUP,
-            HF_HUB_API_SECRET_KEY,
-        )
-    )
+    hf_auth_token = os.environ["HF_API_TOKEN"]
+    hh.login(token=hf_auth_token)
     api = hh.HfApi()
     if quantized_8bit:
         repo_id = f"{publish_config.repo_id}-8bit"
@@ -650,24 +661,24 @@ def save_to_hf_hub(
 def fine_tune(
     config: TrainerConfig,
     publish_config: PublishConfig,
-    ds_config: Optional[dict] = None,
+    deepspeed_config: Optional[dict] = None,
 ):
     data = get_data(config=config)
     model_dir = train(
         config=config,
         clm_dataset=data,
-        ds_config=ds_config,
+        deepspeed_config=deepspeed_config,
     )
     quantized_model_dir = quantize_model(
         config=config,
         model_dir=model_dir,
     )
 
-    repo_url = save_to_hf_hub(
+    save_to_hf_hub(
         model_dir=model_dir,
         publish_config=publish_config,
     )
-    quantized_repo_url = save_to_hf_hub(
+    save_to_hf_hub(
         model_dir=quantized_model_dir,
         publish_config=publish_config,
         quantized_8bit=True,

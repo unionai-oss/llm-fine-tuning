@@ -9,9 +9,9 @@ from dataclasses_json import dataclass_json
 
 import flytekit
 import torch
-import torch.nn as nn
 import transformers
 from flytekit import Secret
+from flytekitplugins.kfpytorch.task import Elastic
 from transformers import (
     TrainerCallback,
     TrainerControl,
@@ -23,27 +23,13 @@ from transformers.utils import logging
 
 from datasets import DatasetDict, load_dataset
 from flytekit import Resources
-from flytekitplugins.kfpytorch.task import Elastic
-from kubernetes.client.models import (
-    V1PodSpec,
-    V1Container,
-    V1Volume,
-    V1EmptyDirVolumeSource,
-    V1VolumeMount,
-)
 
 from fine_tuning.llm_fine_tuning import save_to_hf_hub, PublishConfig
 
-"""
-Unused imports:
-import torch.nn as nn
-import bitsandbytes as bnb
-"""
 
 from peft import (
     LoraConfig,
     get_peft_model,
-    prepare_model_for_int8_training,
     prepare_model_for_kbit_training,
     get_peft_model_state_dict,
     set_peft_model_state_dict,
@@ -55,15 +41,15 @@ logging.set_verbosity_debug()
 logger = logging.get_logger("transformers")
 
 
-# # Union Cloud Tenants
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+# Union Cloud Tenants
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
-# Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# # Flyte Development Tenant
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
 @dataclass_json
@@ -80,7 +66,7 @@ class TrainerConfig:
     micro_batch_size: int = 4
     num_epochs: int = 3
     max_steps: int = -1
-    eval_steps: int = 200
+    eval_steps: int = 500
     save_steps: int = 200
     learning_rate: float = 3e-4
     cutoff_len: int = 256
@@ -209,26 +195,8 @@ class TokenizerHelper:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.14",
+    cache_version="0.0.19",
     requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
-    # task_config=Elastic(nnodes=1),
-    pod_template=flytekit.PodTemplate(
-        primary_container_name="unionai-llm-fine-tuning",
-        pod_spec=V1PodSpec(
-            containers=[
-                V1Container(
-                    name="unionai-llm-fine-tuning",
-                    volume_mounts=[V1VolumeMount(mount_path="/dev/shm", name="dshm")]
-                )
-            ],
-            volumes=[
-                V1Volume(
-                    name="dshm",
-                    empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
-                )
-            ]
-        ),
-    ),
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
@@ -268,8 +236,6 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
 
     gradient_accumulation_steps = config.batch_size // config.micro_batch_size
     device_map = config.device_map
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
-    logger.info(f"WORLD_SIZE: {world_size}")
 
     # Check if parameter passed or if set within environ
     use_wandb = len(config.wandb_project) > 0 or (
@@ -284,13 +250,25 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     if len(config.wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = config.wandb_log_model
 
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        llm_int8_threshold=6.0,
+        llm_int8_skip_modules=None,
+        llm_int8_enable_fp32_cpu_offload=True,
+        llm_int8_has_fp16_weight=False,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+    )
+
     model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
-        load_in_8bit=True,
-        torch_dtype=torch.float16,
+        load_in_4bit=True,
+        torch_dtype=torch.bfloat16,
         device_map=device_map,
-        # device_map={"": 0},
-        use_auth_token=hf_auth_token, 
+        max_memory={i: '46000MB' for i in range(torch.cuda.device_count())},
+        quantization_config=bnb_config,
+        use_auth_token=hf_auth_token,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -300,6 +278,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
+    model.gradient_checkpointing_enable()
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(
         model,
@@ -377,8 +356,7 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
             fp16=True,
             half_precision_backend="auto",
             logging_steps=1,
-            optim="adamw_torch",
-            # optim="adamw_bnb_8bit",
+            optim="paged_adamw_8bit",
             evaluation_strategy="steps" if config.val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=eval_steps if config.val_set_size > 0 else None,
@@ -386,7 +364,6 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
             output_dir=config.output_dir,
             save_total_limit=1,
             load_best_model_at_end=True if config.val_set_size > 0 else False,
-            # ddp_find_unused_parameters=False if ddp else None,
             group_by_length=config.group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
@@ -394,10 +371,10 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
-        # callbacks=[SavePeftModelCallback],
     )
 
     old_state_dict = model.state_dict
+
     model.state_dict = (
         lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
     ).__get__(model, type(model))

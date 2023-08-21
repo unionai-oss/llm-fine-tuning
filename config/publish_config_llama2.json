@@ -1,10 +1,10 @@
 {
-    "repo_id": "unionai/Llama-2-7b-hf",
+    "repo_id": "unionai/Llama-2-7b-hf-wikipedia",
     "readme": "# Llama-2-7b-hf fine-tuned on wikipedia",
     "language": "python",
     "model_card": {
         "language": ["en"],
         "license": "apache-2.0",
-        "tags": ["pytorch", "causal-lm", "llama2", "fine-tuning", "wikipedia"]
+        "tags": ["pytorch", "causal-lm", "redpajama", "fine-tuning", "wikipedia"]
     }
 }
