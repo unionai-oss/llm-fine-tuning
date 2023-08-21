@@ -1,9 +1,9 @@
 {
-    "base_model": "meta-llama/Llama-2-7b-hf",
+    "base_model": "togethercomputer/RedPajama-INCITE-Base-3B-v1",
     "data_path":"wikipedia",
     "data_name": "20220301.simple",
     "num_epochs": 1,
-    "max_steps": 100,
-    "batch_size": 4,
+    "max_steps": 500,
+    "batch_size": 16,
     "micro_batch_size": 1
 }

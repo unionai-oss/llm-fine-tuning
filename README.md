@@ -1,9 +1,9 @@
-# LLM Fine Tuning
+# 🤖🔧 LLM Fine Tuning
 
-A fine-tuning project for LLMs on Flyte
+This repository contains is the Union.ai open source codebase for running LLM
+fine-tuning jobs on Flyte or Union Cloud.
 
-
-## Setup
+## 💻 Setup
 
 ```bash
 python -m venv ~/venvs/llm-fine-tuning
@@ -11,20 +11,21 @@ source ~/venvs/llm-fine-tuning/bin/activate
 pip install -r requirements.txt
 ```
 
-### Set Environment Variables
+### Export Environment Variables
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace this with your own flyte config
+export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
-export FLYTE_SDK_LOGGING_LEVEL=100
 export FLYTE_PROJECT=llm-fine-tuning
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
 ```
 
-## Container Build
+## 🐳 Container Build [Optional]
 
-Build a base image that has transformers and deepspeed pre-built.
+This repository comes with a pre-built image for running the fine-tuning workflows,
+but if you want to build your own, follow these instructions to build an image
+with `transformers` and `deepspeed` pre-built.
 
 ```bash
 docker login ghcr.io
@@ -34,7 +35,13 @@ docker build . -t $image_name:$gitsha -f Dockerfile
 docker push $image_name:$gitsha
 ```
 
-## Run on Flyte
+## 🚀 Run on a Flyte or Union Cloud Cluster
+
+The instructions below will run on your Flyte or Union Cloud cluster assuming
+you have the follow prerequisites:
+
+- The [flyte pytorch plugin](https://docs.flyte.org/en/latest/deployment/plugins/k8s/index.html#spin-up-a-cluster) is enabled on your cluster.
+- The [pytorch kubernetes operator](https://docs.flyte.org/en/latest/deployment/plugins/k8s/index.html#install-the-kubernetes-operator) is installed on your cluster.
 
 ### Create Project
 
@@ -49,16 +56,24 @@ flytectl --config $FLYTECTL_CONFIG create project  \
   --name "llm-fine-tuning"
 ```
 
-### Full Fine-tuning
+### 🔀 Fine-tuning Workflows
 
-The following instructions are for full fine-tuning of a pre-trained model.
+The `fine_tuning` directory contains Flyte tasks and workflows for fine-tuning
+LLMs:
 
-#### Configuration
+- `fine_tuning/llm_fine_tuning.py`: Full fine-tuning using DeepSpeed
+- `fine_tuning/llm_tuning_lora.py`: Parameter-efficient fine-tuning using LoRA
+- `fine_tuning/llm_tuning_qlora.py`: Parameter-efficient fine-tuning using 4-bit QLoRA
 
-Update the arguments in the `.json` files in the `config` directory. These
-will be used to inform which model, dataset, and training arguments are used.
+#### ⚙️ Configuration
 
-Run locally:
+The `config` directory contains `*.json` files which correspond to different
+configurations for fine-tuning. These are used to determine the model, dataset,
+training arguments, and model publishing arguments.
+
+<details>
+<summary>Local Fine-tuning (facebook/opt-125m)</summary>
+<p>
 
 ```bash
 pyflyte run \
@@ -68,7 +83,15 @@ pyflyte run \
     --deepspeed_config "{}"
 ```
 
-### Full Fine-tuning on Flyte
+</p>
+</details>
+
+#### RedPajama Fine-tuning
+
+<details>
+<summary>Full Fine-tuning (togethercomputer/RedPajama-INCITE-Base-3B-v1)</summary>
+
+<p>
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -82,9 +105,13 @@ pyflyte --config $FLYTECTL_CONFIG \
     --deepspeed_config config/zero_config_ds.json
 ```
 
-### Fine-tuning with LoRA
+</p>
+</details>
 
-The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
+
+<details>
+<summary>LoRA Fine-tuning (togethercomputer/RedPajama-INCITE-7B-Base)</summary>
+<p>
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -97,9 +124,14 @@ pyflyte --config $FLYTECTL_CONFIG \
     --publish_config config/publish_config_lora.json
 ```
 
-## Llama2 Fine-tuning
+</p>
+</details>
 
-### Full Fine-tuning
+#### Llama2 Fine-tuning
+
+<details>
+<summary>Full Fine-tuning (meta-llama/Llama-2-7b-hf)</summary>
+<p>
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -113,9 +145,13 @@ pyflyte --config $FLYTECTL_CONFIG \
     --deepspeed_config config/zero_config_ds.json
 ```
 
-### Fine-tuning with 8-bit LoRA
+</p>
+</details>
 
-The following instructions are for fine-tuning using [LoRA](https://arxiv.org/abs/2106.09685)
+
+<details>
+<summary>LoRA Fine-tuning (meta-llama/Llama-2-13b-hf)</summary>
+<p>
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -128,7 +164,12 @@ pyflyte --config $FLYTECTL_CONFIG \
     --publish_config config/publish_config_llama2_lora.json
 ```
 
-### Fine-tuning with QLoRA
+</p>
+</details>
+
+<details>
+<summary>LoRA Fine-tuning (meta-llama/Llama-2-70b-hf)</summary>
+<p>
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -140,3 +181,6 @@ pyflyte --config $FLYTECTL_CONFIG \
     --config config/training_config_llama2_qlora.json \
     --publish_config config/publish_config_llama2_qlora.json
 ```
+
+</p>
+</details>
