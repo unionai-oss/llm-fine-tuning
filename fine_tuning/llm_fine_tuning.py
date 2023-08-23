@@ -15,6 +15,7 @@ import yaml
 
 import pandera as pa
 import wandb
+from accelerate import Accelerator
 from datasets import DatasetDict, Dataset, load_dataset
 from flytekit import Resources
 from transformers import Trainer, TrainingArguments
@@ -36,10 +37,10 @@ from dataclasses_json import dataclass_json
 
 
 class WikipediaDataset(pa.DataFrameModel):
-    id: int
-    url: str = pa.Field(str_startswith="https://")
-    title: str = pa.Field(str_length={"max_value": 1_000})
-    text: str = pa.Field(str_length={"max_value": 500_000})
+    id: pa.typing.Series[int]
+    url: pa.typing.Series[str] = pa.Field(str_startswith="https://")
+    title: pa.typing.Series[str] = pa.Field(str_length={"max_value": 1_000})
+    text: pa.typing.Series[str] = pa.Field(str_length={"max_value": 500_000})
 
     class Config:
         coerce = True
@@ -392,13 +393,14 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.7",
+    cache_version="0.0.8",
     task_config=Elastic(
-        nnodes=2,
+        nnodes=5,
         nproc_per_node=8,
-        rdzv_configs={"timeout": 1800, "join_timeout": 1800}
+        rdzv_configs={"timeout": 3600, "join_timeout": 3600},
+        max_restarts=3,
     ),
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
+    requests=Resources(mem="128Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
@@ -406,8 +408,8 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
         # NOTE: secrets currently do not work with the Elastic plugin, use
         # environment variable. Make sure you don't check this data into git!
         # https://github.com/flyteorg/flyte/issues/3907 
-        "WANDB_API_KEY": "<wandb_api_key>",
-        "HF_API_TOKEN": "<huggingface_api_token>",
+        "WANDB_API_KEY": "8524642eb2070c679d42832d25c4a8dabeddd2ac",
+        "HF_API_TOKEN": "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",
     },
 )
 def train(
@@ -464,8 +466,12 @@ def train(
     model = transformers.AutoModelForCausalLM.from_pretrained(
         config.base_model,
         cache_dir=config.cache_dir,
+        torch_dtype=torch.float16,
+        # `use_cache=True` does not work with gradient checkpointing.
+        use_cache=False,
         use_auth_token=hf_auth_token,
     )
+    model.gradient_checkpointing_enable()
 
     tokenizer_kwargs = dict(
         cache_dir=config.cache_dir,
@@ -520,17 +526,21 @@ def train(
     )
     print("training model")
     trainer.train()
-    trainer.save_state()
-    print("saving model")
-    trainer.save_model(output_dir=training_args.output_dir)
 
-    print("saving arguments for model, data, and training")
-    output_root = Path(training_args.output_dir)
+    accelerator: Accelerator = trainer.accelerator
+    if accelerator.is_main_process:
+        trainer.save_state()
+        print("saving model in main process")
+        trainer.save_model(output_dir=training_args.output_dir)
 
-    with (output_root / "flyte_training_config.json").open("w") as f:
-        json.dump(config.to_dict(), f)
+        print("saving arguments for model, data, and training")
+        output_root = Path(training_args.output_dir)
 
-    print("done")
+        with (output_root / "flyte_training_config.json").open("w") as f:
+            json.dump(config.to_dict(), f)
+
+        print("done")
+
     return flytekit.directory.FlyteDirectory(path=training_args.output_dir)
 
 

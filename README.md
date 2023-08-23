@@ -15,7 +15,8 @@ pip install -r requirements.txt
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
+# export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
+export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
@@ -104,7 +105,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config.json \
     --publish_config config/publish_config.json \
-    --deepspeed_config config/zero_config_ds.json
+    --deepspeed_config config/deepspeed.json
 ```
 
 </p>
@@ -144,7 +145,47 @@ pyflyte --config $FLYTECTL_CONFIG \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config_llama2.json \
     --publish_config config/publish_config_llama2.json \
-    --deepspeed_config config/zero_config_ds.json
+    --deepspeed_config config/deepspeed.json
+```
+
+</p>
+</details>
+
+
+<details>
+<summary>Full Fine-tuning (meta-llama/Llama-2-13b-hf)</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    fine_tuning/llm_fine_tuning.py fine_tune \
+    --config config/training_config_llama2.json \
+    --publish_config config/publish_config_llama2.json \
+    --deepspeed_config config/deepspeed_llama2_13b.json
+```
+
+</p>
+</details>
+
+
+<details>
+<summary>Full Fine-tuning (meta-llama/Llama-2-70b-hf)</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    fine_tuning/llm_fine_tuning.py fine_tune \
+    --config config/training_config_llama2.json \
+    --publish_config config/publish_config_llama2.json \
+    --deepspeed_config config/deepspeed_llama2_70b.json
 ```
 
 </p>

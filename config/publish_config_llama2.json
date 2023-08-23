@@ -1,6 +1,6 @@
 {
-    "repo_id": "unionai/Llama-2-7b-hf-wikipedia",
-    "readme": "# Llama-2-7b-hf fine-tuned on wikipedia",
+    "repo_id": "unionai/Llama-2-70b-hf-wikipedia",
+    "readme": "# Llama-2-70b-hf fine-tuned on wikipedia",
     "language": "python",
     "model_card": {
         "language": ["en"],
