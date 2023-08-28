@@ -17,8 +17,13 @@ import pandera as pa
 import wandb
 from accelerate import Accelerator
 from datasets import DatasetDict, Dataset, load_dataset
-from flytekit import Resources
+from deepspeed import DeepSpeedEngine
+from deepspeed.utils.zero_to_fp32 import (
+    load_state_dict_from_zero_checkpoint,
+    get_fp32_state_dict_from_zero_checkpoint,
+)
 from transformers import Trainer, TrainingArguments
+from transformers.trainer_utils import get_last_checkpoint
 from kubernetes.client.models import (
     V1PodSpec,
     V1Container,
@@ -28,7 +33,7 @@ from kubernetes.client.models import (
 )
 
 import flytekit
-from flytekit import Secret
+from flytekit import Secret, Resources
 from flytekit.deck.renderer import TopFrameRenderer
 from flytekitplugins.huggingface.sd_transformers import HuggingFaceDatasetRenderer
 from flytekit.types.structured.structured_dataset import StructuredDataset, PARQUET
@@ -57,6 +62,9 @@ HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 # WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
 # HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
+WANDB_API_KEY = "..."
+HF_API_TOKEN = "..."
+
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -74,6 +82,22 @@ PROMPT_DICT = {
         "### Instruction:\n{instruction}\n\n### Response:"
     ),
 }
+
+
+@dataclass_json
+@dataclass
+class HuggingFaceModelCard:
+    language: List[str]
+    license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
+    tags: List[str]
+
+
+@dataclass_json
+@dataclass
+class PublishConfig:
+    repo_id: str
+    readme: Optional[str] = None
+    model_card: Optional[HuggingFaceModelCard] = None
 
 
 @dataclass_json
@@ -105,20 +129,7 @@ class TrainerConfig:
     debug_mode: bool = False
     debug_train_data_size: int = 1024
     wandb_project: str = field(default="")
-
-@dataclass_json
-@dataclass
-class HuggingFaceModelCard:
-    language: List[str]
-    license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
-    tags: List[str]
-
-@dataclass_json
-@dataclass
-class PublishConfig:
-    repo_id: str
-    readme: Optional[str] = None
-    model_card: Optional[HuggingFaceModelCard] = None
+    publish_config: Optional[PublishConfig] = field(default=None)
 
 
 @dataclass_json
@@ -364,7 +375,7 @@ finetuning_pod_template = flytekit.PodTemplate(
         volumes=[
             V1Volume(
                 name="dshm",
-                empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="60Gi")
+                empty_dir=V1EmptyDirVolumeSource(medium="", size_limit="200Gi")
             )
         ]
     ),
@@ -393,14 +404,14 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.8",
+    cache_version="0.0.14",
     task_config=Elastic(
         nnodes=5,
         nproc_per_node=8,
         rdzv_configs={"timeout": 3600, "join_timeout": 3600},
-        max_restarts=3,
+        max_restarts=1,
     ),
-    requests=Resources(mem="128Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
+    requests=Resources(mem="256Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
@@ -408,8 +419,8 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
         # NOTE: secrets currently do not work with the Elastic plugin, use
         # environment variable. Make sure you don't check this data into git!
         # https://github.com/flyteorg/flyte/issues/3907 
-        "WANDB_API_KEY": "8524642eb2070c679d42832d25c4a8dabeddd2ac",
-        "HF_API_TOKEN": "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",
+        "WANDB_API_KEY": WANDB_API_KEY,
+        "HF_API_TOKEN": HF_API_TOKEN,
     },
 )
 def train(
@@ -529,17 +540,48 @@ def train(
 
     accelerator: Accelerator = trainer.accelerator
     if accelerator.is_main_process:
-        trainer.save_state()
-        print("saving model in main process")
-        trainer.save_model(output_dir=training_args.output_dir)
+        print("Saving tokenizer")
+        tokenizer.save_pretrained(training_args.output_dir)
 
-        print("saving arguments for model, data, and training")
-        output_root = Path(training_args.output_dir)
+    use_checkpoint = False
+    if use_checkpoint:
+        # this saving strategy requires checkpoints to be saved in a network
+        # filesystem where all pods in the distributed run can access it.
+        print("creating checkpoint")
+        checkpoint_dir = os.path.join("/dev/shm", "checkpoint-final")
+        trainer.deepspeed.save_checkpoint(checkpoint_dir, tag="final")
+        accelerator.wait_for_everyone()
 
-        with (output_root / "flyte_training_config.json").open("w") as f:
-            json.dump(config.to_dict(), f)
+        print("Checkpoint directory contents:")
+        for f in Path(checkpoint_dir).glob("**/*"):
+            print(f)
+        accelerator.wait_for_everyone()
 
-        print("done")
+        print("loading state dict from zero")
+        fp32_model = load_state_dict_from_zero_checkpoint(
+            trainer.model, checkpoint_dir, tag="final"
+        )
+        print("saving model")
+        fp32_model.save_pretrained(
+            config.output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
+        )
+    else:
+        trainer.model.save_pretrained(
+            training_args.output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
+            state_dict=accelerator.get_state_dict(trainer.deepspeed),
+        )
+
+    print("saving arguments for model, data, and training")
+    output_root = Path(training_args.output_dir)
+
+    with (output_root / "flyte_training_config.json").open("w") as f:
+        json.dump(config.to_dict(), f)
+
+    print("done")
 
     return flytekit.directory.FlyteDirectory(path=training_args.output_dir)
 
@@ -547,9 +589,9 @@ def train(
 @flytekit.task(
     cache=True,
     cache_version="0.0.3",
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
+    requests=Resources(mem="256Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
     environment={
-        "HF_API_TOKEN": "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",
+        "HF_API_TOKEN": HF_API_TOKEN,
     },
 )
 def quantize_model(
@@ -609,24 +651,19 @@ MODEL_CARD_TEMPLATE = """
     retries=3,
     cache=True,
     cache_version="0.0.4",
-    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="100Gi"),
+    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="200Gi"),
     environment={
-        "HF_API_TOKEN": "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",
+        "HF_API_TOKEN": HF_API_TOKEN,
     },
-    # secret_requests=[
-    #     Secret(
-    #         group=SECRET_GROUP,
-    #         key=HF_HUB_API_SECRET_KEY,
-    #         mount_requirement=Secret.MountType.FILE,
-    #     )
-    # ]
 )
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
-    publish_config: PublishConfig,
+    config: TrainerConfig,
     quantized_8bit: Optional[bool] = None,
 ) -> str:
     # make sure the file can be downloaded
+    publish_config = config.publish_config
+
     model_dir.download()
     root = Path(model_dir.path)
     hf_auth_token = os.environ["HF_API_TOKEN"]
@@ -662,7 +699,7 @@ def save_to_hf_hub(
     api.upload_folder(
         repo_id=repo_id,
         folder_path=root,
-        ignore_patterns=["flyte-*", "models--*"]
+        ignore_patterns=["flyte*", "models--*", "tmp*"]
     )
     return str(repo_url)
 
@@ -670,7 +707,6 @@ def save_to_hf_hub(
 @flytekit.workflow
 def fine_tune(
     config: TrainerConfig,
-    publish_config: PublishConfig,
     deepspeed_config: Optional[dict] = None,
 ):
     data = get_data(config=config)
@@ -686,11 +722,11 @@ def fine_tune(
 
     save_to_hf_hub(
         model_dir=model_dir,
-        publish_config=publish_config,
+        config=config,
     )
     save_to_hf_hub(
         model_dir=quantized_model_dir,
-        publish_config=publish_config,
+        config=config,
         quantized_8bit=True,
     )
 

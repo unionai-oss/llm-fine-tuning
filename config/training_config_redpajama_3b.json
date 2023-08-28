@@ -1,0 +1,19 @@
+{
+    "base_model": "togethercomputer/RedPajama-INCITE-Base-3B-v1",
+    "data_path":"wikipedia",
+    "data_name": "20220301.simple",
+    "num_epochs": 1,
+    "max_steps": 500,
+    "batch_size": 16,
+    "micro_batch_size": 1,
+    "publish_config": {
+        "repo_id": "unionai/RedPajama-INCITE-Base-3B-v1-wikipedia",
+        "readme": "# RedPajama-INCITE-Base-3B-v1 fine-tuned on wikipedia",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": ["pytorch", "causal-lm", "redpajama", "fine-tuning", "wikipedia"]
+        }
+    }    
+}

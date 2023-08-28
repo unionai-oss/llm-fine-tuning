@@ -82,7 +82,6 @@ training arguments, and model publishing arguments.
 pyflyte run \
     fine_tuning/llm_fine_tuning.py fine_tune \
     --config config/training_config_local.json \
-    --publish_config config/publish_config.json \
     --deepspeed_config "{}"
 ```
 
@@ -103,8 +102,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     fine_tuning/llm_fine_tuning.py fine_tune \
-    --config config/training_config.json \
-    --publish_config config/publish_config.json \
+    --config config/training_config_redpajama_3b.json \
     --deepspeed_config config/deepspeed.json
 ```
 
@@ -123,8 +121,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     fine_tuning/llm_fine_tuning_lora.py fine_tune \
-    --config config/training_config_lora.json \
-    --publish_config config/publish_config_lora.json
+    --config config/training_config_redpajama_7b_lora.json
 ```
 
 </p>
@@ -143,8 +140,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     fine_tuning/llm_fine_tuning.py fine_tune \
-    --config config/training_config_llama2.json \
-    --publish_config config/publish_config_llama2.json \
+    --config config/training_config_llama2_7b.json \
     --deepspeed_config config/deepspeed.json
 ```
 
@@ -163,8 +159,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     fine_tuning/llm_fine_tuning.py fine_tune \
-    --config config/training_config_llama2.json \
-    --publish_config config/publish_config_llama2.json \
+    --config config/training_config_llama2_13b.json \
     --deepspeed_config config/deepspeed_llama2_13b.json
 ```
 
@@ -173,45 +168,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 
 
 <details>
-<summary>Full Fine-tuning (meta-llama/Llama-2-70b-hf)</summary>
-<p>
-
-```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
-    --copy-all \
-    --project $FLYTE_PROJECT \
-    --image $IMAGE \
-    fine_tuning/llm_fine_tuning.py fine_tune \
-    --config config/training_config_llama2.json \
-    --publish_config config/publish_config_llama2.json \
-    --deepspeed_config config/deepspeed_llama2_70b.json
-```
-
-</p>
-</details>
-
-
-<details>
-<summary>LoRA Fine-tuning (meta-llama/Llama-2-13b-hf)</summary>
-<p>
-
-```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
-    --copy-all \
-    --project $FLYTE_PROJECT \
-    --image $IMAGE \
-    fine_tuning/llm_fine_tuning_lora.py fine_tune \
-    --config config/training_config_llama2_lora.json \
-    --publish_config config/publish_config_llama2_lora.json
-```
-
-</p>
-</details>
-
-<details>
-<summary>LoRA Fine-tuning (meta-llama/Llama-2-70b-hf)</summary>
+<summary>QLoRA Fine-tuning (meta-llama/Llama-2-13b-hf)</summary>
 <p>
 
 ```bash
@@ -221,8 +178,24 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     fine_tuning/llm_fine_tuning_qlora.py fine_tune \
-    --config config/training_config_llama2_qlora.json \
-    --publish_config config/publish_config_llama2_qlora.json
+    --config config/training_config_llama2_13b_qlora.json
+```
+
+</p>
+</details>
+
+<details>
+<summary>QLoRA Fine-tuning (meta-llama/Llama-2-70b-hf)</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    fine_tuning/llm_fine_tuning_qlora.py fine_tune \
+    --config config/training_config_llama2_70b_qlora.json
 ```
 
 </p>

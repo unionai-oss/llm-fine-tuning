@@ -1,0 +1,19 @@
+{
+    "base_model": "meta-llama/Llama-2-13b-hf",
+    "data_path":"wikipedia",
+    "data_name": "20220301.simple",
+    "num_epochs": 1,
+    "max_steps": 1,
+    "batch_size": 4,
+    "micro_batch_size": 1,
+    "publish_config": {
+        "repo_id": "unionai/Llama-2-13b-hf-wikipedia",
+        "readme": "# Llama-2-13b-hf fine-tuned on wikipedia",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": ["pytorch", "causal-lm", "llama2", "fine-tuning", "wikipedia"]
+        }
+    }    
+}

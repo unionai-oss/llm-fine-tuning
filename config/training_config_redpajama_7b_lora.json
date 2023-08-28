@@ -16,5 +16,15 @@
     "train_on_inputs": true,
     "group_by_length": true,
     "resume_from_checkpoint": null,
-    "debug_mode": false
+    "debug_mode": false,
+    "publish_config": {
+        "repo_id": "unionai/RedPajama-INCITE-7B-Base-LoRA-alpaca-cleaned",
+        "readme": "# RedPajama-INCITE-7B fine-tuned on LoRA alpaca-cleaned",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": ["pytorch", "causal-lm", "redpajama", "fine-tuning", "wikipedia"]
+        }
+    }    
 }

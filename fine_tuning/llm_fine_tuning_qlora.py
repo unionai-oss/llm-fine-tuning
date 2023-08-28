@@ -88,7 +88,7 @@ class TrainerConfig:
     wandb_log_model: str = ""  # options: false | true
     debug_mode: bool = False
     debug_train_data_size: int = 1024
-
+    publish_config: Optional[PublishConfig] = field(default=None)
 
 
 class SavePeftModelCallback(TrainerCallback):
@@ -395,10 +395,9 @@ def train(config: TrainerConfig) -> flytekit.directory.FlyteDirectory:
 @flytekit.workflow
 def fine_tune(
     config: TrainerConfig,
-    publish_config: PublishConfig,
 ):
     model_dir = train(config=config)
     save_to_hf_hub(
         model_dir=model_dir,
-        publish_config=publish_config,
+        config=config,
     )
