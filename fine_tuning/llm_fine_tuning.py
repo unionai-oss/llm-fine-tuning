@@ -406,7 +406,7 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
     cache=True,
     cache_version="0.0.14",
     task_config=Elastic(
-        nnodes=5,
+        nnodes=3,
         nproc_per_node=8,
         rdzv_configs={"timeout": 3600, "join_timeout": 3600},
         max_restarts=1,
