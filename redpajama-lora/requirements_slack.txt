@@ -1,3 +1,5 @@
 flytekit
-datasets
-openai
+transformers
+bitsandbytes
+accelerate
+scipy
