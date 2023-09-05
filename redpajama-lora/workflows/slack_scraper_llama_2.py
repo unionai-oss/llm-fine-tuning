@@ -55,17 +55,16 @@ Context: {output}
 
     # Load base model
     model = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-2-13b-chat-hf",
+        "meta-llama/Llama-2-7b-chat-hf",
         quantization_config=bnb_config,
         torch_dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True,
-        load_in_8bit_fp32_cpu_offload=True,
         token=token,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        "meta-llama/Llama-2-13b-chat-hf",
+        "meta-llama/Llama-2-7b-chat-hf",
         token=token,
     )
     tokenizer.pad_token_id = tokenizer.eos_token_id  # for open-ended generation
