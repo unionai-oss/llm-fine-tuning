@@ -1,4 +1,4 @@
-FROM python:3.10-slim-buster
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel
 
 WORKDIR /root
 ENV VENV /opt/venv
@@ -8,9 +8,7 @@ ENV PYTHONPATH /root
 
 RUN apt-get update && apt-get install build-essential git -y
 
-COPY requirements_slack.txt /root/requirements.txt
-WORKDIR /root
+COPY requirements_slack.txt /root/requirements_slack.txt
+RUN pip install -r /root/requirements_slack.txt
 
-RUN pip install -r /root/requirements.txt
-
-COPY flyte-slack-data /root/flyte-slack-data
+ADD flyte-slack-data /root/flyte-slack-data
