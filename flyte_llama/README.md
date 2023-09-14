@@ -1,8 +1,46 @@
 # Flyte Llama
 
+![](static/flyte_llama.png)
+
 Flyte Llama is a fine-tuned model based on [Code Llama](https://about.fb.com/news/2023/08/code-llama-ai-for-coding/).
 
-## Dataset
+## Usage
+
+### Env Setup
+
+```bash
+python -m venv ~/venvs/flyte-llama
+source ~/venvs/flyte-llama/bin/activate
+pip install -r requirements.txt
+```
+
+### Export Environment Variables
+
+```bash
+export PYTHONPATH=$(pwd):$PYTHONPATH
+export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace with your flyte/union cloud config
+export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
+export FLYTE_PROJECT=llm-fine-tuning
+export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
+```
+
+## 🐳 Container Build [Optional]
+
+This repository comes with a pre-built image for running the fine-tuning workflows,
+but if you want to build your own, follow these instructions to build an image
+with `transformers` and `deepspeed` pre-built.
+
+```bash
+docker login ghcr.io
+gitsha=$(git rev-parse --short=7 HEAD)
+image_name=$REGISTRY/unionai-flyte-llama
+docker build . -t $image_name:$gitsha -f Dockerfile
+docker push $image_name:$gitsha
+```
+
+## Model Description
+
+### Dataset
 
 This system will be based on all of the [Flyte](https://flyte.org/) codebases:
 
@@ -19,7 +57,7 @@ This system will be based on all of the [Flyte](https://flyte.org/) codebases:
 The dataset will consist of source files, tests, and documentation from all of
 these repositories.
 
-## Training
+### Training
 
 There are several possible training approaches to take:
 
@@ -29,9 +67,9 @@ There are several possible training approaches to take:
 
 We'll start with the simplest case using CLM to get a baseline, then experiment
 with FIM since we may want Flyte Llama to be able to both complete code and
-suggest code given some suffix and prefix.
+suggest code given some suffix and prefix (see [Resources](#resources) section below).
 
-## Evaluation
+### Evaluation
 
 We'll use perplexity as a baseline metric for evaluating the model. This will
 capture how well the fine-tuned model fits the data.
@@ -49,7 +87,7 @@ should be different enough from the code in the core source code repos that the 
 will have to figure out how to use the basic building blocks in the source code
 to generate the examples (this is somewhat what a human does to generate code examples).
 
-## Resources
+### Resources
 
 - [Code LLama paper](https://ai.meta.com/research/publications/code-llama-open-foundation-models-for-code/)
 - [Causal Masked Multimodal Model paper](https://arxiv.org/abs/2201.07520)
