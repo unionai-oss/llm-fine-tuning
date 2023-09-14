@@ -38,7 +38,7 @@ docker build . -t $image_name:$gitsha -f Dockerfile
 docker push $image_name:$gitsha
 ```
 
-## Model Description
+## 🔖 Model Card
 
 ### Dataset
 
@@ -56,6 +56,12 @@ This system will be based on all of the [Flyte](https://flyte.org/) codebases:
 
 The dataset will consist of source files, tests, and documentation from all of
 these repositories.
+
+### Dataset Extension
+
+This dataset could be enriched with open source repos that use Flyte in their
+codebase. This would further train the model on how the community uses flytekit
+or configures their codebase in the wild.
 
 ### Training
 
