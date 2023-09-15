@@ -8,7 +8,7 @@ from flytekit import task, workflow, current_context, Resources, Secret
 from flytekit.loggers import logger
 from flytekit.types.directory import FlyteDirectory
 
-from flyte_llama import dataset, train
+import flyte_llama
 
 
 # Flyte Development Tenant
@@ -19,14 +19,14 @@ HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 @task(cache=True, cache_version="0")
 def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirectory:
-    urls = [*dataset.REPO_URLS, *(additional_urls or [])]
+    urls = [*flyte_llama.dataset.REPO_URLS, *(additional_urls or [])]
 
     ctx = current_context()
     working_dir = Path(ctx.working_directory)
     output_dir = working_dir / "dataset"
     repo_cache_dir = working_dir / "repo_cache"
 
-    dataset.create_dataset(urls, output_dir, repo_cache_dir)
+    flyte_llama.__file__dataset.create_dataset(urls, output_dir, repo_cache_dir)
     return FlyteDirectory(output_dir)
 
 
@@ -53,7 +53,10 @@ def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirector
         ),
     ],
 )
-def train(dataset: FlyteDirectory, config: train.TrainerConfig) -> FlyteDirectory:
+def train(
+    dataset: FlyteDirectory,
+    config: flyte_llama.train.TrainerConfig,
+) -> FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         logger.info(f"Training Flyte Llama with params:\n{config}")
 
@@ -74,9 +77,8 @@ def train(dataset: FlyteDirectory, config: train.TrainerConfig) -> FlyteDirector
 
 @workflow
 def train_workflow(
-    config: train.TrainerConfig,
-    additional_urls: Optional[List[str]] = None,
+    config: flyte_llama.train.TrainerConfig,
 ) -> FlyteDirectory:
-    dataset = create_dataset(additional_urls=additional_urls)
+    dataset = create_dataset()
     model = train(dataset=dataset, config=config)
     return model

@@ -21,7 +21,7 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
-export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
+export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:b38fd93
 ```
 
 ## 🐳 Container Build [Optional]
@@ -46,12 +46,36 @@ python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
 
 ### Train model
 
+
+<details>
+<summary>Local</summary>
+<p>
 ```bash
 python flyte_llama/train.py \
     --model_path codellama/CodeLlama-7b-hf \
     --data_dir=~/datasets/flyte_llama \
     --output_dir=~/models/flyte_llama
 ```
+</p>
+</details>
+
+
+<details>
+<summary>Flyte Llama Qlora</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py train_workflow \
+    --config config/flyte_llama_7b_qlora_v0.json
+```
+</p>
+</details>
+
 
 ## 🔖 Model Card
 
