@@ -30,7 +30,7 @@ REPO_URLS = [
 
 def iter_github_documents(
     url: str,
-    cache_dir: Path,
+    repo_cache_dir: Path,
     extensions: Optional[list[str]] = None,
     exclude_files: Optional[list[str]] = None,
     exclude_patterns: Optional[list[str]] = None,
@@ -41,15 +41,15 @@ def iter_github_documents(
     exclude_patterns = exclude_patterns or []
     repo_name = url.split("/")[-1]
 
-    repo_dir = cache_dir / repo_name
-    if (cache_dir / repo_name).exists():
+    repo_dir = repo_cache_dir / repo_name
+    if (repo_cache_dir / repo_name).exists():
         print(f"repo cache exists, loading from {repo_dir}")
         repo = Repo(repo_dir)
     else:
         repo = Repo.clone_from(url, repo_dir)
 
     git_sha = repo.head.commit.hexsha
-    git_dir = Path(cache_dir)
+    git_dir = Path(repo_cache_dir)
 
     exclude_from_patterns = [
         *itertools.chain(*(git_dir.glob(p) for p in exclude_patterns))
@@ -76,23 +76,29 @@ def get_file_name(repo_filepath: Path) -> str:
 def create_dataset(
     urls: list[str],
     output_dir: Path,
-    cache_dir: Path,
+    repo_cache_dir: Path,
     **kwargs,
 ):
     for url in urls:
         print("processing url:", url)
         for file, repo_name, repo_filepath, github_url in iter_github_documents(
-                url, cache_dir, **kwargs,
+                url, repo_cache_dir, **kwargs,
             ):
-            out_path = output_dir / repo_name / get_file_name(repo_filepath)
+            file_name = get_file_name(repo_filepath)
+            out_path = output_dir / repo_name / file_name
             out_path.parent.mkdir(parents=True, exist_ok=True)
+
+            metadata_file = (
+                output_dir / "metadata" / repo_name / file_name
+            ).with_suffix(".metadata.json")
+            metadata_file.parent.mkdir(parents=True, exist_ok=True)
+
             print(f"writing file: {out_path.name}")
             shutil.copy(file, out_path)
 
             metadata = {
                 "github_url": github_url,
             }
-            metadata_file = out_path.with_suffix(".metadata.json")
             with metadata_file.open("w") as f:
                 json.dump(metadata, f)
 
@@ -101,7 +107,13 @@ def create_dataset(
 
 
 if __name__ == "__main__":
-    output_path = Path.home() / "datasets" / "flyte_llama"
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser()
+    parser.add_argument("--output-path", type=str, required=True, default="~/datasets/flyte_llama")
+    args = parser.parse_args()
+
+    output_path = Path(args.path)
     output_path.mkdir(parents=True, exist_ok=True)
     create_dataset(
         REPO_URLS,

@@ -38,6 +38,21 @@ docker build . -t $image_name:$gitsha -f Dockerfile
 docker push $image_name:$gitsha
 ```
 
+### Create dataset
+
+```bash
+python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
+```
+
+### Train model
+
+```bash
+python flyte_llama/train.py \
+    --model_path codellama/CodeLlama-7b-hf \
+    --data_dir=~/datasets/flyte_llama \
+    --output_dir=~/models/flyte_llama
+```
+
 ## 🔖 Model Card
 
 ### Dataset
