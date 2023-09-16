@@ -17,7 +17,11 @@ WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
 HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
-@task(cache=True, cache_version="0")
+@task(
+    cache=True,
+    cache_version="0",
+    requests=Resources(mem="8Gi", cpu="2", ephemeral_storage="8Gi"),
+)
 def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirectory:
     urls = [*flyte_llama.dataset.REPO_URLS, *(additional_urls or [])]
 
@@ -26,8 +30,8 @@ def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirector
     output_dir = working_dir / "dataset"
     repo_cache_dir = working_dir / "repo_cache"
 
-    flyte_llama.__file__dataset.create_dataset(urls, output_dir, repo_cache_dir)
-    return FlyteDirectory(output_dir)
+    flyte_llama.dataset.create_dataset(urls, output_dir, repo_cache_dir)
+    return FlyteDirectory(path=str(output_dir))
 
 
 @task(
@@ -60,6 +64,9 @@ def train(
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         logger.info(f"Training Flyte Llama with params:\n{config}")
 
+    wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID", "local")
+    os.environ["WANDB_RUN_ID"] = wandb_run_name
+
     ctx = current_context()
     os.environ["WANDB_API_KEY"] = ctx.secrets.get(SECRET_GROUP, WANDB_API_SECRET_KEY)
 
@@ -71,8 +78,8 @@ def train(
     except Exception:
         hf_auth_token = None
 
-    train.train(config, hf_auth_token)
-    return FlyteDirectory(config.output_dir)
+    flyte_llama.train.train(config, hf_auth_token)
+    return FlyteDirectory(path=str(config.output_dir))
 
 
 @workflow

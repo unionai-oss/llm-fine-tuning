@@ -21,7 +21,7 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
-export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:b38fd93
+export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:2b857ea
 ```
 
 ## 🐳 Container Build [Optional]
@@ -61,7 +61,7 @@ python flyte_llama/train.py \
 
 
 <details>
-<summary>Flyte Llama Qlora</summary>
+<summary>Flyte Llama 7b Qlora</summary>
 <p>
 
 ```bash
@@ -72,6 +72,38 @@ pyflyte --config $FLYTECTL_CONFIG \
     --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json
+```
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 13b Qlora</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py train_workflow \
+    --config config/flyte_llama_13b_qlora_v0.json
+```
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 34b Qlora</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py train_workflow \
+    --config config/flyte_llama_13b_qlora_v0.json
 ```
 </p>
 </details>

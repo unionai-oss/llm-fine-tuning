@@ -43,7 +43,7 @@ class TrainerConfig:
     model_max_length: int = 1024
     seed: int = 41
     report_to: str = "none"
-    device_map: str = "auto"
+    device_map: Optional[str] = "auto"
     gradient_accumulation_steps: int = 8
     padding: str = "right"
     dataloader_num_proc: int = 8
@@ -73,7 +73,7 @@ def train(config: TrainerConfig, hf_auth_token: Optional[str] = None, **kwargs):
         **kwargs,
         "use_auth_token": hf_auth_token,
         "torch_dtype": torch.float16,
-        "device_map": None,
+        "device_map": config.device_map,
     }
     if config.use_4bit:
         load_model_params = {
@@ -88,7 +88,6 @@ def train(config: TrainerConfig, hf_auth_token: Optional[str] = None, **kwargs):
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16,
             ),
-            "device_map": "auto",
             "load_in_4bit": True,
         }
         
