@@ -103,7 +103,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
-    --config config/flyte_llama_13b_qlora_v0.json
+    --config config/flyte_llama_34b_qlora_v0.json
 ```
 </p>
 </details>
@@ -145,6 +145,15 @@ There are several possible training approaches to take:
 We'll start with the simplest case using CLM to get a baseline, then experiment
 with FIM since we may want Flyte Llama to be able to both complete code and
 suggest code given some suffix and prefix (see [Resources](#resources) section below).
+
+### Data Augmentation
+
+There are many data augmentation techniques we can leverage on top of the training
+approaches mentioned above:
+
+- **Add metadata to the context:** This can include adding the repo name,
+  file name, file extension to the beginnign of each training example to condition
+  the token completion on the context of the code.
 
 ### Evaluation
 

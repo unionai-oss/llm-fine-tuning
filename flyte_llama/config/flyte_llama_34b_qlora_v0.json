@@ -1,5 +1,5 @@
 {
-    "model_path": "codellama/CodeLlama-13b-hf",
+    "model_path": "codellama/CodeLlama-34b-hf",
     "output_dir": "./output",
     "checkpoint_dir": null,
     "num_epochs": 1,
@@ -8,7 +8,7 @@
     "model_max_length": 1024,
     "seed": 41,
     "report_to": "wandb",
-    "device_map": null,
+    "device_map": "auto",
     "gradient_accumulation_steps": 8,
     "padding": "right",
     "dataloader_num_proc": 8,

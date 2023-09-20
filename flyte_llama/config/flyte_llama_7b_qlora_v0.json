@@ -8,7 +8,7 @@
     "model_max_length": 1024,
     "seed": 41,
     "report_to": "wandb",
-    "device_map": null,
+    "device_map": "auto",
     "gradient_accumulation_steps": 8,
     "padding": "right",
     "dataloader_num_proc": 8,
