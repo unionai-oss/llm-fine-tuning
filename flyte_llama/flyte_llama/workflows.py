@@ -11,10 +11,15 @@ from flytekit.types.directory import FlyteDirectory
 import flyte_llama
 
 
-# Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# Union Tenant
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
+
+# # Flyte Development Tenant
+# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
+# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
+# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
 
 
 @task(
