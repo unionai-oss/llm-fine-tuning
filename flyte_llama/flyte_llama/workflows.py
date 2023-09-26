@@ -65,9 +65,14 @@ def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirector
 def train(
     dataset: FlyteDirectory,
     config: flyte_llama.train.TrainerConfig,
+    pretrained_adapter: Optional[FlyteDirectory] = None,
 ) -> FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         logger.info(f"Training Flyte Llama with params:\n{config}")
+
+    if pretrained_adapter is not None:
+        print(f"Downloading pretrained adapter {pretrained_adapter}")
+        pretrained_adapter.download()
 
     wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID", "local")
     os.environ["WANDB_RUN_ID"] = wandb_run_name
@@ -83,14 +88,19 @@ def train(
     except Exception:
         hf_auth_token = None
 
-    flyte_llama.train.train(config, hf_auth_token)
+    flyte_llama.train.train(config, pretrained_adapter, hf_auth_token)
     return FlyteDirectory(path=str(config.output_dir))
 
 
 @workflow
 def train_workflow(
     config: flyte_llama.train.TrainerConfig,
+    pretrained_adapter: Optional[FlyteDirectory] = None,
 ) -> FlyteDirectory:
     dataset = create_dataset()
-    model = train(dataset=dataset, config=config)
+    model = train(
+        dataset=dataset,
+        config=config,
+        pretrained_adapter=pretrained_adapter,
+    )
     return model

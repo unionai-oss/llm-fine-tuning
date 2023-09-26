@@ -50,6 +50,7 @@ python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
 <details>
 <summary>Local</summary>
 <p>
+
 ```bash
 python flyte_llama/train.py \
     --model_path codellama/CodeLlama-7b-hf \
@@ -72,6 +73,23 @@ pyflyte --config $FLYTECTL_CONFIG \
     --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json
+```
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 7b Qlora from previous adapter checkpoint</summary>
+<p>
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py train_workflow \
+    --config config/flyte_llama_7b_qlora_v0.json \
+    --pretrained_adapter s3://path/to/checkpoint
 ```
 </p>
 </details>
@@ -128,11 +146,20 @@ This system will be based on all of the [Flyte](https://flyte.org/) codebases:
 The dataset will consist of source files, tests, and documentation from all of
 these repositories.
 
-### Dataset Extension
+### Data Source Extensions
 
 This dataset could be enriched with open source repos that use Flyte in their
-codebase. This would further train the model on how the community uses flytekit
-or configures their codebase in the wild.
+codebase, which includes open source repos maintained by the Flyte core team
+and those maintained by the community. This would further train the model on how
+the community uses flytekit or configures their codebase in the wild.
+
+### LLM-augmented supervised finetuning
+
+We can build a supervised finetuning dataset using an LLM to generate a synthetic
+instruction given a piece of Flyte code. For example, given a `flytesnacks` example,
+an LLM can be prompted to create an instruction associated with that example. Or,
+given a flytekit plugin, an LLM can be prompted to create an instruction associated
+with creating the flytekit plugin class that implements the plugin interface.
 
 ### Training
 

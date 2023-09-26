@@ -1,5 +1,6 @@
 """Train Flyte Llama."""
 
+import json
 import math
 import os
 from dataclasses import dataclass, field, asdict
@@ -9,6 +10,7 @@ from typing import List, Optional
 import torch
 from dataclasses_json import dataclass_json
 
+from peft import PeftModel
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -43,21 +45,26 @@ class TrainerConfig:
     model_max_length: int = 1024
     seed: int = 41
     report_to: str = "none"
-    device_map: Optional[str] = "auto"
+    device_map: Optional[str] = None
     gradient_accumulation_steps: int = 8
     padding: str = "right"
     dataloader_num_proc: int = 8
     use_fp16: bool = False
     use_4bit: bool = False
     use_qlora: bool = False
-    lora_r: int = 8,
-    lora_alpha: int = 16,
+    lora_r: int = 8
+    lora_alpha: int = 16
     lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "k_proj", "v_proj"])
-    lora_dropout: float = 0.05,
+    lora_dropout: float = 0.05
     debug: bool = False
 
 
-def train(config: TrainerConfig, hf_auth_token: Optional[str] = None, **kwargs):
+def train(
+    config: TrainerConfig,
+    pretrained_adapter: Optional[Path] = None,
+    hf_auth_token: Optional[str] = None,
+    **kwargs,
+):
     print("Training model...")
 
     # load tokenizer
@@ -102,39 +109,32 @@ def train(config: TrainerConfig, hf_auth_token: Optional[str] = None, **kwargs):
         optim = "paged_adamw_8bit"
         model.gradient_checkpointing_enable()
         model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(
-            model,
-                LoraConfig(
+
+        if pretrained_adapter is not None:
+            lora_config = LoraConfig.from_pretrained(pretrained_adapter)
+            lora_config.inference_mode = False
+            model = get_peft_model(model, lora_config)
+            model.load_adapter(
+                pretrained_adapter,
+                adapter_name="default",
+                is_trainable=True,
+            )
+            model.set_adapter("default")
+        else:
+            lora_config = LoraConfig(
                 r=config.lora_r,
                 lora_alpha=config.lora_alpha,
                 target_modules=config.lora_target_modules,
                 lora_dropout=config.lora_dropout,
                 bias="none",
                 task_type="CAUSAL_LM",
-            ),
-        )
+            )
+            model = get_peft_model(model, lora_config)
+
+        print("LORA Config:")
+        print(json.dumps(asdict(lora_config), indent=4))
         model.print_trainable_parameters()
 
-
-    def tokenize(examples):
-        return tokenizer(examples['text'])
-
-    limit = 5 if config.debug else None
-    dataset = (
-        get_dataset(
-            Path(config.data_dir).expanduser(),
-            num_proc=config.dataloader_num_proc,
-            limit=limit,
-            block_size=config.model_max_length,
-            skip_by=config.model_max_length,
-        )
-        .map(tokenize, batched=True, num_proc=config.dataloader_num_proc)
-    )
-
-    print(f"Dataset size: {len(dataset)}")
-    dataset_splits = dataset.train_test_split(
-        test_size=config.test_size, seed=config.seed
-    )
     tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
@@ -161,6 +161,26 @@ def train(config: TrainerConfig, hf_auth_token: Optional[str] = None, **kwargs):
         save_total_limit=1,
     )
 
+    def tokenize(examples):
+        return tokenizer(examples['text'])
+
+    limit = 5 if config.debug else None
+    dataset = (
+        get_dataset(
+            Path(config.data_dir).expanduser(),
+            num_proc=config.dataloader_num_proc,
+            limit=limit,
+            block_size=config.model_max_length,
+            skip_by=config.model_max_length,
+        )
+        .map(tokenize, batched=True, num_proc=config.dataloader_num_proc)
+    )
+
+    print(f"Dataset size: {len(dataset)}")
+    dataset_splits = dataset.train_test_split(
+        test_size=config.test_size, seed=config.seed
+    )
+
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -181,4 +201,5 @@ if __name__ == "__main__":
     args = parser.parse_args_into_dataclasses()[0]
 
     print(f"Arguments: {args}")
-    train(args)
+    pretrained_adapter = Path.home() / "models/flyte_llama_adapters/f3377f5a787ac4ede924"
+    train(args, pretrained_adapter=pretrained_adapter)
