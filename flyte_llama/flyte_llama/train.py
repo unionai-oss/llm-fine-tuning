@@ -135,6 +135,26 @@ def train(
         print(json.dumps(asdict(lora_config), indent=4))
         model.print_trainable_parameters()
 
+    def tokenize(examples):
+        return tokenizer(examples['text'])
+
+    limit = 5 if config.debug else None
+    dataset = (
+        get_dataset(
+            Path(config.data_dir).expanduser(),
+            num_proc=config.dataloader_num_proc,
+            limit=limit,
+            block_size=config.model_max_length,
+            skip_by=config.model_max_length,
+        )
+        .map(tokenize, batched=True, num_proc=config.dataloader_num_proc)
+    )
+
+    print(f"Dataset size: {len(dataset)}")
+    dataset_splits = dataset.train_test_split(
+        test_size=config.test_size, seed=config.seed
+    )
+
     tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
@@ -159,26 +179,6 @@ def train(
         save_strategy="steps",
         save_steps=500,
         save_total_limit=1,
-    )
-
-    def tokenize(examples):
-        return tokenizer(examples['text'])
-
-    limit = 5 if config.debug else None
-    dataset = (
-        get_dataset(
-            Path(config.data_dir).expanduser(),
-            num_proc=config.dataloader_num_proc,
-            limit=limit,
-            block_size=config.model_max_length,
-            skip_by=config.model_max_length,
-        )
-        .map(tokenize, batched=True, num_proc=config.dataloader_num_proc)
-    )
-
-    print(f"Dataset size: {len(dataset)}")
-    dataset_splits = dataset.train_test_split(
-        test_size=config.test_size, seed=config.seed
     )
 
     trainer = Trainer(
