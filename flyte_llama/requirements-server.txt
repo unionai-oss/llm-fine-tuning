@@ -1,0 +1,10 @@
+bitsandbytes==0.41.1
+huggingface_hub
+msgpack
+mosec
+scipy
+torch==2.0.1
+
+git+https://github.com/huggingface/accelerate.git
+git+https://github.com/huggingface/peft.git
+git+https://github.com/huggingface/transformers.git@main#egg=transformers[torch]

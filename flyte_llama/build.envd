@@ -1,0 +1,19 @@
+# syntax=v1
+
+
+def basic():
+    install.apt_packages(["git"])
+    install.python()
+    install.python_packages(requirements="requirements-server.txt")
+
+
+def build():
+    base(image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel", dev=True)
+    basic()
+    runtime.expose(envd_port=8000, host_port=8000, service="flyte-llama")
+
+
+def serving():
+    basic()
+    io.copy("server.py", "/")
+    config.entrypoint(["python", "/server.py", "--timeout", "30000"])

@@ -11,7 +11,6 @@ import torch
 from dataclasses_json import dataclass_json
 
 import transformers
-from peft import PeftModel
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -65,10 +64,10 @@ class TrainerConfig:
     model_max_length: int = 1024
     seed: int = 41
     report_to: str = "none"
-    device_map: Optional[str] = "auto"
+    device_map: Optional[str] = None
     gradient_accumulation_steps: int = 8
     padding: str = "right"
-    dataloader_num_proc: int = 8
+    dataloader_num_proc: int = 1
     use_fp16: bool = False
     use_4bit: bool = False
     use_qlora: bool = False
@@ -100,7 +99,7 @@ def train(
     load_model_params = {
         **kwargs,
         "use_auth_token": hf_auth_token,
-        "torch_dtype": torch.float16,
+        "torch_dtype": torch.bfloat16,
         "device_map": config.device_map,
     }
     if config.use_4bit:
@@ -157,7 +156,11 @@ def train(
         model.print_trainable_parameters()
 
     def tokenize(examples):
-        return tokenizer(examples['text'])
+        tokens = tokenizer(
+            # add eos token to each example
+            [f"{t}{tokenizer.eos_token}" for t in examples['text']]
+        )
+        return tokens
 
     limit = 5 if config.debug else None
     dataset = (

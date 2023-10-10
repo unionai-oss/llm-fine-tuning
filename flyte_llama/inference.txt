@@ -1,0 +1,82 @@
+The code below shows a flyte workflow that uses the Spark plugin to process pyspark dataframes.
+    # %%
+    @workflow
+    def wf() -> int:
+        return my_spark_task(df=df)
+
+    # %% [markdown]
+    # :::{note}
+    # You can use the `spark` task in a `workflow` just like any other task.
+    # :::
+
+
+    # %% [markdown]
+    # ## Flyte Pandas Plugin
+    #
+    # The flyte pandas plugin is a plugin that allows you to read and write pandas dataframes to and from the Flyte blobstore.
+    #
+    # :::{note}
+    # You can use the `pandas` task in a `workflow` just like any other task.
+    # :::
+
+    # %% [markdown]
+    # ## Flyte Spark Plugin
+    #
+    # The flyte spark plugin is a plugin that allows you to run spark jobs on the Flyte cluster.
+    #
+    # :::{note}
+    # You can use the `spark` task in a `workflow` just like any other task.
+    # :::
+
+
+if __name__ == "__main__":
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print(f"Running {__file__} main...")
+    print

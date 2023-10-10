@@ -4,15 +4,15 @@
 
 Flyte Llama is a fine-tuned model based on [Code Llama](https://about.fb.com/news/2023/08/code-llama-ai-for-coding/).
 
-## Usage
-
-### Env Setup
+## Env Setup
 
 ```bash
 python -m venv ~/venvs/flyte-llama
 source ~/venvs/flyte-llama/bin/activate
 pip install -r requirements.txt
 ```
+
+## Train model
 
 ### Export Environment Variables
 
@@ -24,7 +24,7 @@ export FLYTE_PROJECT=llm-fine-tuning
 export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:2b857ea
 ```
 
-## 🐳 Container Build [Optional]
+### 🐳 Container Build
 
 This repository comes with a pre-built image for running the fine-tuning workflows,
 but if you want to build your own, follow these instructions to build an image
@@ -44,7 +44,7 @@ docker push $image_name:$gitsha
 python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
 ```
 
-### Train model
+### Train Model
 
 
 <details>
@@ -65,7 +65,7 @@ python flyte_llama/train.py \
 <summary>Flyte Llama 7b Qlora</summary>
 <p>
 
-Train:
+**Train:**
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -77,7 +77,7 @@ pyflyte --config $FLYTECTL_CONFIG \
     --config config/flyte_llama_7b_qlora_v0.json
 ```
 
-Publish:
+**Publish:**
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -97,6 +97,9 @@ pyflyte --config $FLYTECTL_CONFIG \
 <details>
 <summary>Flyte Llama 7b Qlora from previous adapter checkpoint</summary>
 <p>
+
+Pass in the `--pretrained_adapter` flag to continue training from a previous
+adapter checkpoint. This is typically an s3 path produced by `train_workflow`.
 
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
@@ -142,6 +145,63 @@ pyflyte --config $FLYTECTL_CONFIG \
 ```
 </p>
 </details>
+
+### Serve model
+
+This project uses [ModelZ](https://modelz.ai/) as the serving layer.
+
+Create a `secrets.txt` file to hold your sensitive credentials:
+
+```bash
+touch secrets.txt
+echo MODELZ_USER_ID="..." >> secrets.txt
+echo MODELZ_API_KEY="..." >> secrets.txt
+echo HF_TOKEN="..." >> secrets.txt
+```
+
+Export env vars:
+
+```bash
+eval $(sed 's/^/export /g' secrets.txt)
+export VERSION=$(git rev-parse --short=7 HEAD)
+export SERVING_IMAGE=ghcr.io/unionai-oss/modelz-flyte-llama-serving:$VERSION
+```
+
+Build the serving image:
+
+```bash
+docker build . -f Dockerfile.server \
+    --build-arg "HF_TOKEN=$HF_TOKEN" \
+    -t $SERVING_IMAGE
+```
+
+Push it:
+
+```bash
+docker push $SERVING_IMAGE
+```
+
+Deploy:
+
+```bash
+python deploy.py \
+    --user-id $MODELZ_USER_ID \
+    --api-key $MODELZ_API_KEY \
+    --deployment-name flyte-llama-$VERSION \
+    --image $SERVING_IMAGE \
+    --server-resource "nvidia-ada-l4-2-24c-96g"
+```
+
+Get the `deployment_key` from the output of the command above and use it to test
+the model:
+
+```bash
+python client.py \
+    --prompt "The code snippet below shows a basic Flyte workflow" \
+    --output-file output.txt \
+    --api-key $MODELZ_API_KEY \
+    --deployment-key <deployment_key>
+```
 
 
 ## 🔖 Model Card
