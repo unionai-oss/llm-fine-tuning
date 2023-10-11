@@ -10,6 +10,7 @@ from typing import List, Optional
 import torch
 from dataclasses_json import dataclass_json
 
+import transformers
 from peft import PeftModel
 from peft import (
     LoraConfig,
@@ -32,6 +33,25 @@ os.environ["WANDB_PROJECT"] = "unionai-flyte-llama"
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 
+transformers.logging.set_verbosity_debug()
+
+
+@dataclass_json
+@dataclass
+class HuggingFaceModelCard:
+    language: List[str]
+    license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
+    tags: List[str]
+
+
+@dataclass_json
+@dataclass
+class PublishConfig:
+    repo_id: str
+    readme: Optional[str] = None
+    model_card: Optional[HuggingFaceModelCard] = None
+
+
 @dataclass_json
 @dataclass
 class TrainerConfig:
@@ -45,7 +65,7 @@ class TrainerConfig:
     model_max_length: int = 1024
     seed: int = 41
     report_to: str = "none"
-    device_map: Optional[str] = None
+    device_map: Optional[str] = "auto"
     gradient_accumulation_steps: int = 8
     padding: str = "right"
     dataloader_num_proc: int = 8
@@ -57,6 +77,7 @@ class TrainerConfig:
     lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "k_proj", "v_proj"])
     lora_dropout: float = 0.05
     debug: bool = False
+    publish_config: Optional[PublishConfig] = field(default=None)
 
 
 def train(

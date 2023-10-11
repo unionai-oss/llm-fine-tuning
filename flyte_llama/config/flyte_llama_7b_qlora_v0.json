@@ -4,12 +4,12 @@
     "checkpoint_dir": null,
     "num_epochs": 1,
     "batch_size": 8,
-    "test_size": 0.01,
+    "test_size": 0.001,
     "model_max_length": 1024,
     "seed": 41,
     "report_to": "wandb",
     "device_map": "auto",
-    "gradient_accumulation_steps": 8,
+    "gradient_accumulation_steps": 4,
     "padding": "right",
     "dataloader_num_proc": 8,
     "use_fp16": true,
@@ -19,5 +19,23 @@
     "lora_alpha": 16,
     "lora_target_modules": ["q_proj", "k_proj", "v_proj"],
     "lora_dropout": 0.05,
-    "debug": false
+    "debug": false,
+    "publish_config": {
+        "repo_id": "unionai/FlyteLlama-v0-7b-hf-flyte-repos",
+        "readme": "# FlyteLlama-v0-7b-hf fine-tuned on Flyte repos",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": [
+                "pytorch",
+                "causal-lm",
+                "llama2",
+                "code llama",
+                "fine-tuning",
+                "flyte llama",
+                "flyte repo dataset"
+            ]
+        }
+    }
 }

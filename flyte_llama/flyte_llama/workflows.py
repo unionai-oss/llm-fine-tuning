@@ -104,3 +104,40 @@ def train_workflow(
         pretrained_adapter=pretrained_adapter,
     )
     return model
+
+
+@task(
+    retries=3,
+    cache=True,
+    cache_version="0.0.4",
+    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="64Gi"),
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+    ],
+)
+def publish_model(
+    model_dir: FlyteDirectory,
+    config: flyte_llama.train.TrainerConfig,
+) -> str:
+    model_dir.download()
+    model_dir = Path(model_dir.path)
+    ctx = current_context()
+
+    try:
+        hf_auth_token = ctx.secrets.get(SECRET_GROUP, HF_HUB_API_SECRET_KEY)
+    except Exception:
+        hf_auth_token = None
+
+    return flyte_llama.publish.publish_to_hf_hub(model_dir, config, hf_auth_token)
+
+
+@workflow
+def publish_model_workflow(
+    model_dir: FlyteDirectory,
+    config: flyte_llama.train.TrainerConfig,
+) -> str:
+    return publish_model(model_dir=model_dir, config=config)

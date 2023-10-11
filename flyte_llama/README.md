@@ -65,6 +65,8 @@ python flyte_llama/train.py \
 <summary>Flyte Llama 7b Qlora</summary>
 <p>
 
+Train:
+
 ```bash
 pyflyte --config $FLYTECTL_CONFIG \
     run --remote \
@@ -74,6 +76,21 @@ pyflyte --config $FLYTECTL_CONFIG \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json
 ```
+
+Publish:
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py publish_model_workflow \
+    --config config/flyte_llama_7b_qlora_v0.json \
+    --model_dir s3://path/to/model
+```
+
+
 </p>
 </details>
 
