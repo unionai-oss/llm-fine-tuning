@@ -1,3 +1,4 @@
+import time
 import typing
 from urllib.parse import urljoin
 
@@ -10,16 +11,35 @@ SLEEP_DURATION = 30
 DEFAULT_TIMEOUT = httpx.Timeout(30, connect=6_000, read=6_000, write=6_000)
 
 
-# def wait_for_service(
-#     httpx_client: httpx.Client,
-#     inference_url: str,
-#     prompt: str,
-#     timeout: typing.Union[int, httpx.Timeout],
-# ):
-#     for i in range(N_RETRIES):
-#     response = httpx_client.get(
-#         root_url, timeout=timeout
-#     )
+NOT_READY_MSG = "no subsets for"
+
+
+def check_availability(
+    httpx_client: httpx.Client,
+    inference_url: str,
+    prompt: str,
+    timeout: typing.Union[int, httpx.Timeout],
+):
+    for _ in range(N_RETRIES):
+        response = httpx_client.post(
+            inference_url, json={"prompt": prompt}, timeout=timeout
+        )
+        if response.status_code >= 500:
+            time.sleep(SLEEP_DURATION)
+            continue
+
+        message = ""
+        try:
+            response_json = response.json()
+            message = response_json["message"]
+        except ValueError:
+            continue
+
+        if NOT_READY_MSG in message:
+            time.sleep(SLEEP_DURATION)
+            continue
+
+        break
 
 
 def infer_stream(
@@ -37,6 +57,8 @@ def infer_stream(
     root_url = client.host.format(deployment_key)
     inference_url = urljoin(root_url, "/inference")
     httpx_client: httpx.Client = client.client
+
+    check_availability(httpx_client, inference_url, prompt, timeout)
 
     with connect_sse(
         httpx_client,

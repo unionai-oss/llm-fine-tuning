@@ -133,7 +133,7 @@ class FlyteLlama(SSEWorker):
             add_special_tokens=False,
             return_tensors="pt",
         )
-        token_buffer = tokens["input_ids"].to(self.config.device)
+        token_buffer = tokens["input_ids"]
         if torch.cuda.is_available():
             token_buffer = token_buffer.to("cuda")
 
