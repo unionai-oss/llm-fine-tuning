@@ -4,14 +4,8 @@ envd build -f :serving --output type=image,name=ghcr.io/unionai-oss/modelz-flyte
 
 import os
 from dataclasses import dataclass
-from io import BytesIO
-from typing import List
 
 import torch  # type: ignore
-from peft import (
-    LoraConfig,
-    get_peft_model,
-)
 import huggingface_hub as hh
 from transformers import (
     pipeline,
@@ -20,24 +14,20 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
-from mosec import Server, Worker, get_logger
-from mosec.mixin import MsgpackMixin
-
-logger = get_logger()
-
 
 @dataclass
 class ServingConfig:
     model_path: str
     adapter_path: str
     model_max_length: int = 1024
+    max_new_tokens: int = 10
     padding: str = "right"
     device_map: str = "auto"
     use_4bit: bool = False
 
 
 def load_pipeline(config):
-    hh.login(token=os.environ["HF_AUTH_TOKEN"])
+    # hh.login(token=os.environ["HF_AUTH_TOKEN"])
 
     tokenizer = AutoTokenizer.from_pretrained(
         config.model_path,
@@ -48,7 +38,6 @@ def load_pipeline(config):
 
     # load pre-trained model
     load_model_params = {
-        # "torch_dtype": torch.float16,
         "torch_dtype": torch.float32,
         "device_map": config.device_map,
     }
@@ -68,35 +57,25 @@ def load_pipeline(config):
         }
 
     model = AutoModelForCausalLM.from_pretrained(
-        config.model_path,
+        config.adapter_path,
         **load_model_params,
     )
-
-    # lora_config = LoraConfig.from_pretrained(config.adapter_path)
-    # lora_config.inference_mode = True
-    # model = get_peft_model(model, lora_config)
-    model.load_adapter(config.adapter_path, adapter_name="default")
-    model.set_adapter("default")
-
-    if torch.cuda.is_available():
-        device = "cuda"
-    # elif torch.backends.mps.is_available():
-    #     device = "mps"
-    else:
-        device = "cpu"
-
-    model = model.to(device)
 
     return pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         device_map=config.device_map,
-        device=device,
     )
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stream", action="store_true", default=False)
+    args = parser.parse_args()
+    
     config = ServingConfig(
         model_path="codellama/CodeLlama-7b-hf",
         adapter_path="unionai/FlyteLlama-v0-7b-hf-flyte-repos",
@@ -106,13 +85,43 @@ if __name__ == "__main__":
     pipe = load_pipeline(config)
         
     print("generating...")
-    results = pipe(
-        ["The code below is a task that uses the Spark plugin to process pyspark dataframes"] * 4,
-        max_length=1024,
-        pad_token_id=pipe.tokenizer.eos_token_id,
-    )
 
-    for res in results:
-        for text in res:
-            print(text["generated_text"])
-    
+    prompts = ["The code below shows a basic Flyte workflow"]
+    print(prompts[0], end="", flush=True)
+
+    prev_msg = prompts[0]
+    if args.stream:
+        tokens = pipe.tokenizer(
+            prompts,
+            add_special_tokens=False,
+            return_tensors="pt",
+        )
+        inputs = tokens["input_ids"]
+        for i in range(100):
+            inputs = pipe.model.generate(
+                inputs,
+                pad_token_id=pipe.tokenizer.eos_token_id,
+                max_new_tokens=config.max_new_tokens,
+                # do_sample=True,
+                # temperature=0.2,
+            )
+
+            if inputs.shape[-1] >= config.model_max_length:
+                inputs = inputs[:, -config.model_max_length:]
+
+            msg = pipe.tokenizer.decode(inputs[0])
+            print_msg = msg[len(prev_msg):]
+            print(print_msg, end="", flush=True)
+            prev_msg = msg
+
+    else:
+        results = pipe(
+            prompts,
+            max_length=40,
+            pad_token_id=pipe.tokenizer.eos_token_id,
+        )
+
+        for res in results:
+            for text in res:
+                print(text["generated_text"])
+        

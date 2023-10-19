@@ -13,6 +13,7 @@ envd build -f :serving --output type=image,name=ghcr.io/unionai-oss/modelz-flyte
 """
 
 import os
+import time
 from dataclasses import dataclass
 from io import BytesIO
 from typing import List
@@ -26,7 +27,7 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
-from mosec import Server, Worker, get_logger
+from mosec import Server, Worker, SSEWorker, ValidationError, get_logger
 from mosec.mixin import MsgpackMixin
 
 logger = get_logger()
@@ -37,14 +38,15 @@ class ServingConfig:
     model_path: str
     adapter_path: str
     model_max_length: int = 1024
-    max_gen_length: int = 1024
+    n_turns: int = 100
+    n_tokens_per_turn: int = 10
     padding: str = "right"
     device_map: str = "auto"
     use_float16: bool = False
     use_4bit: bool = False
 
 
-def load_pipeline(config):
+def load_tokenizer_and_model(config):
     hh.login(token=os.environ["HF_AUTH_TOKEN"])
     
     tokenizer = AutoTokenizer.from_pretrained(
@@ -90,9 +92,15 @@ def load_pipeline(config):
     )
 
 
-class FlyteLlama(MsgpackMixin, Worker):
+class Preprocess(Worker):
+    def forward(self, data):
+        prompt = data.get("prompt")
+        if prompt is None:
+            raise ValidationError("prompt is required")
+        return prompt
 
-    resp_mime_type = "text/plain"
+
+class FlyteLlama(SSEWorker):
 
     def __init__(self):
 
@@ -111,33 +119,49 @@ class FlyteLlama(MsgpackMixin, Worker):
             device_map=device_map,
             use_float16=use_float16,
             use_4bit=use_4bit,
+            n_turns=100,
+            n_tokens_per_turn=10,
         )
-        self.pipe = load_pipeline(self.config)
+        self.pipeline = load_tokenizer_and_model(self.config)
+        # self.example = ["Flyte is a"] * 4  # warmup (bs=4)
 
-    def forward(self, data: List[str]) -> List[memoryview]:
-        logger.debug("generate images for %s", data)
-        results = self.pipe(
-            data,
-            max_length=self.config.max_gen_length,
-            pad_token_id=self.pipe.tokenizer.eos_token_id,
+    def forward(self, prompts):
+        logger.info(f"generate text for {prompts}")
+
+        tokens = self.pipeline.tokenizer(
+            prompts,
+            add_special_tokens=False,
+            return_tensors="pt",
         )
-        outputs = []
-        for res in results:
-            for text in res:
-                dummy_file = BytesIO()
-                dummy_file.write(text["generated_text"].encode())
-                outputs.append(dummy_file.getbuffer())
-        return outputs
+        token_buffer = tokens["input_ids"].to(self.config.device)
+        if torch.cuda.is_available():
+            token_buffer = token_buffer.to("cuda")
+
+        for _ in range(self.config.n_turns):
+            token_buffer = self.pipeline.model.generate(
+                token_buffer,
+                pad_token_id=self.pipeline.tokenizer.eos_token_id,
+                max_new_tokens=self.config.n_tokens_per_turn,
+            )
+
+            if token_buffer.shape[-1] >= self.config.model_max_length:
+                token_buffer = token_buffer[:, -self.config.model_max_length:]
+
+            for i in range(len(prompts)):
+                gen_text = self.pipeline.tokenizer.decode(token_buffer[i])
+                self.send_stream_event(gen_text, index=i)
+
+        return prompts
 
 
 if __name__ == "__main__":
     server = Server()
+    server.append_worker(Preprocess, timeout=180_000)
     server.append_worker(
         FlyteLlama,
-        num=4,
-        max_batch_size=4,
-        max_wait_time=10,
+        num=1,
+        max_batch_size=2,
         timeout=180_000,
-        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * 4,
+        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}],
     )
     server.run()

@@ -1,0 +1,28 @@
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel
+
+WORKDIR /root
+ENV VENV /opt/venv
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+ENV PYTHONPATH /root
+
+ARG VERSION
+ARG DOCKER_IMAGE
+
+RUN apt-get update && apt-get install build-essential git -y
+
+COPY ./requirements-server-sse.txt /root/requirements-server-sse.txt
+WORKDIR /root
+
+RUN pip install -r requirements-server-sse.txt
+
+WORKDIR /root
+COPY ./server_sse.py /root
+
+ENV PYTHONPATH "/root:$PYTHONPATH"
+
+ARG HF_TOKEN
+ENV HF_AUTH_TOKEN=${HF_TOKEN}
+RUN python server_sse.py --dry-run
+
+ENTRYPOINT [ "python", "server_sse.py", "--timeout", "180000" ]

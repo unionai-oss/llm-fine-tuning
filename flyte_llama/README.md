@@ -153,11 +153,15 @@ This project uses [ModelZ](https://modelz.ai/) as the serving layer.
 Create a `secrets.txt` file to hold your sensitive credentials:
 
 ```bash
-touch secrets.txt
-echo MODELZ_USER_ID="..." >> secrets.txt
-echo MODELZ_API_KEY="..." >> secrets.txt
-echo HF_TOKEN="..." >> secrets.txt
+# do this once
+echo MODELZ_USER_ID="<replace>" >> secrets.txt
+echo MODELZ_API_KEY="<replace>" >> secrets.txt
+echo HF_TOKEN="<replace>" >> secrets.txt
 ```
+
+<details>
+<summary>Serving a POST Endpoint</summary>
+<p>
 
 Export env vars:
 
@@ -202,6 +206,62 @@ python client.py \
     --api-key $MODELZ_API_KEY \
     --deployment-key <deployment_key>
 ```
+
+</p>
+</details>
+
+<details>
+<summary>Serving a Server Streaming Events (SSE) Endpoint</summary>
+<p>
+
+Export env vars:
+
+```bash
+eval $(sed 's/^/export /g' secrets.txt)
+export VERSION=$(git rev-parse --short=7 HEAD)
+export SERVING_SSE_IMAGE=ghcr.io/unionai-oss/modelz-flyte-llama-serving-sse:$VERSION
+```
+
+Build the serving image:
+
+```bash
+docker build . -f Dockerfile.server_sse \
+    --build-arg "HF_TOKEN=$HF_TOKEN" \
+    -t $SERVING_SSE_IMAGE
+```
+
+Push it:
+
+```bash
+docker push $SERVING_SSE_IMAGE
+```
+
+Deploy:
+
+```bash
+python deploy.py \
+    --user-id $MODELZ_USER_ID \
+    --api-key $MODELZ_API_KEY \
+    --deployment-name flyte-llama-sse-$VERSION \
+    --image $SERVING_SSE_IMAGE \
+    --server-resource "nvidia-ada-l4-2-24c-96g" \
+    --stream
+```
+
+Get the `deployment_key` from the output of the command above and use it to test
+the model:
+
+```bash
+python client_sse.py \
+    --prompt "The code snippet below shows a basic Flyte workflow" \
+    --output-file output.txt \
+    --api-key $MODELZ_API_KEY \
+    --deployment-key <deployment_key>
+```
+
+</p>
+</details>
+
 
 
 ## 🔖 Model Card

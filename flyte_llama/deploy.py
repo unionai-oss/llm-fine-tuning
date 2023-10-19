@@ -21,6 +21,7 @@ def deploy_model(
     image: str,
     server_resource: ServerResource,
     env_vars: typing.Dict[str, str],
+    stream: bool = False,
 ):
     """Deploy model to Modelz
 
@@ -28,15 +29,18 @@ def deploy_model(
     """
     url = f"https://cloud.modelz.ai/api/v1/users/{user_id}/clusters/modelz/deployments"
 
+    if stream:
+        accept = content_type = "text/event-stream"
+    else:
+        accept = content_type = "application/json"
+
     headers = {
-        "accept": "application/json",
+        "accept": accept,
         "X-API-KEY": api_key,
     }
     payload = {
         "spec": {
-            "deployment_source": {
-                "docker": {"image": image},
-            },
+            "deployment_source": {"docker": {"image": image}},
             "image_config": {"enable_cache_optimize": True},
             "env_vars": env_vars,
             "framework": "mosec",
@@ -50,9 +54,10 @@ def deploy_model(
             "zero_duration": 1200,
         }
     }
+
     deployment_response = requests.post(
         url,
-        headers={"content-type": "application/json", **headers},
+        headers={"content-type": content_type, **headers},
         json=payload,
     )
     deployment_json = deployment_response.json()
@@ -88,6 +93,7 @@ if __name__ == "__main__":
         choices=typing.get_args(ServerResource),
         default="nvidia-ada-l4-2-24c-96g",
     )
+    parser.add_argument("--stream", action="store_true", default=False)
 
     args = parser.parse_args()
 
