@@ -1,45 +1,48 @@
 import time
 import typing
+from contextlib import contextmanager
 from urllib.parse import urljoin
 
 import httpx
 import modelz
 from httpx_sse import connect_sse
+from httpx_sse._exceptions import SSEError
 
 N_RETRIES = 1000
-SLEEP_DURATION = 30
+SLEEP_DURATION = 10
 DEFAULT_TIMEOUT = httpx.Timeout(30, connect=6_000, read=6_000, write=6_000)
 
 
 NOT_READY_MSG = "no subsets for"
 
 
-def check_availability(
+@contextmanager
+def sse_connection(
     httpx_client: httpx.Client,
     inference_url: str,
     prompt: str,
     timeout: typing.Union[int, httpx.Timeout],
 ):
-    for _ in range(N_RETRIES):
-        response = httpx_client.post(
-            inference_url, json={"prompt": prompt}, timeout=timeout
-        )
-        if response.status_code >= 500:
-            time.sleep(SLEEP_DURATION)
-            continue
+    print("🔎 Checking availability")
+    for i in range(N_RETRIES):
+        if i > 0:
+            print(f"Retry: {i}")
 
-        message = ""
-        try:
-            response_json = response.json()
-            message = response_json["message"]
-        except ValueError:
-            continue
+        with connect_sse(
+            httpx_client,
+            "POST",
+            inference_url,
+            json={"prompt": prompt},
+            timeout=timeout,
+        ) as event_source:
+            try:
+                event_source._check_content_type()
+            except SSEError:
+                time.sleep(SLEEP_DURATION)
+                continue
 
-        if NOT_READY_MSG in message:
-            time.sleep(SLEEP_DURATION)
-            continue
-
-        break
+            yield event_source
+            break
 
 
 def infer_stream(
@@ -58,17 +61,19 @@ def infer_stream(
     inference_url = urljoin(root_url, "/inference")
     httpx_client: httpx.Client = client.client
 
-    check_availability(httpx_client, inference_url, prompt, timeout)
-
-    with connect_sse(
+    prev_msg = prompt
+    with sse_connection(
         httpx_client,
-        "POST",
         inference_url,
-        json={"prompt": prompt},
+        prompt,
         timeout=timeout,
     ) as event_source:
+        print(prompt, end="", flush=True)
         for sse in event_source.iter_sse():
-            print(f"Event({sse.event}): {sse.data}")
+            msg = sse.data
+            print_msg = msg[len(prev_msg):]
+            print(print_msg, end="", flush=True)
+            prev_msg = msg
 
 
 if __name__ == "__main__":

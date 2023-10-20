@@ -40,7 +40,7 @@ class ServingConfig:
     model_max_length: int = 1024
     n_turns: int = 100
     n_tokens_per_turn: int = 10
-    padding: str = "right"
+    padding: str = "left"
     device_map: str = "auto"
     use_float16: bool = False
     use_4bit: bool = False
@@ -93,8 +93,8 @@ def load_tokenizer_and_model(config):
 
 
 class Preprocess(Worker):
-    def forward(self, data):
-        prompt = data.get("prompt")
+    def forward(self, params):
+        prompt = params.get("prompt")
         if prompt is None:
             raise ValidationError("prompt is required")
         return prompt

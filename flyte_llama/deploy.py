@@ -91,7 +91,7 @@ if __name__ == "__main__":
         type=str,
         required=False,
         choices=typing.get_args(ServerResource),
-        default="nvidia-ada-l4-2-24c-96g",
+        default="nvidia-ada-l4-4-48c-192g",
     )
     parser.add_argument("--stream", action="store_true", default=False)
 
