@@ -1,5 +1,5 @@
 {
-    "model_path": "codellama/CodeLlama-7b-hf",
+    "model_path": "codellama/CodeLlama-7b-Instruct-hf",
     "output_dir": "./output",
     "checkpoint_dir": null,
     "num_epochs": 1,
@@ -21,8 +21,8 @@
     "lora_dropout": 0.05,
     "debug": false,
     "publish_config": {
-        "repo_id": "unionai/FlyteLlama-v0-7b-hf-flyte-repos",
-        "readme": "# FlyteLlama-v0-7b-hf fine-tuned on Flyte repos",
+        "repo_id": "unionai/FlyteLlama-v0-7b-Instruct-hf-flyte-repos",
+        "readme": "# FlyteLlama-v0-7b-Instruct-hf fine-tuned on Flyte repos",
         "language": "python",
         "model_card": {
             "language": ["en"],
