@@ -156,12 +156,14 @@ class FlyteLlama(SSEWorker):
 
 if __name__ == "__main__":
     server = Server()
-    server.append_worker(Preprocess, timeout=180_000)
-    server.append_worker(
-        FlyteLlama,
-        num=1,
-        max_batch_size=2,
+
+    num_workers = 2
+    kwargs = dict(
+        num=num_workers,
+        max_batch_size=4,
         timeout=180_000,
-        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}],
+        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * num_workers,
     )
+    server.append_worker(Preprocess, **kwargs)
+    server.append_worker(FlyteLlama, **kwargs)
     server.run()
