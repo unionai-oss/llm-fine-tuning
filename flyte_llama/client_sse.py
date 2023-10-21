@@ -21,6 +21,7 @@ def sse_connection(
     httpx_client: httpx.Client,
     inference_url: str,
     prompt: str,
+    n_tokens: int,
     timeout: typing.Union[int, httpx.Timeout],
 ):
     print("🔎 Checking availability")
@@ -32,7 +33,7 @@ def sse_connection(
             httpx_client,
             "POST",
             inference_url,
-            json={"prompt": prompt},
+            json={"prompt": prompt, "n_tokens": n_tokens},
             timeout=timeout,
         ) as event_source:
             try:
@@ -48,6 +49,7 @@ def sse_connection(
 
 def infer_stream(
     prompt: str,
+    n_tokens: int,
     api_key: str,
     deployment_key: str,
     timeout: typing.Union[int, httpx.Timeout] = DEFAULT_TIMEOUT,
@@ -67,11 +69,16 @@ def infer_stream(
         httpx_client,
         inference_url,
         prompt,
+        n_tokens,
         timeout=timeout,
     ) as event_source:
         print(prompt, end="", flush=True)
         for sse in event_source.iter_sse():
             msg = sse.data
+            if msg.startswith("<s>"):
+                msg = msg[4:]
+            if "</s>" in msg:
+                break
             print_msg = msg[len(prev_msg):]
             print(print_msg, end="", flush=True)
             prev_msg = msg
@@ -82,6 +89,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", required=True)
+    parser.add_argument("--n-tokens", required=False, default=500, type=int)
     parser.add_argument("--output-file", required=True)
     parser.add_argument("--api-key", required=True)
     parser.add_argument("--deployment-key", required=True)

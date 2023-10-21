@@ -39,7 +39,7 @@ class ServingConfig:
     adapter_path: str
     model_max_length: int = 1024
     n_turns: int = 100
-    n_tokens_per_turn: int = 10
+    n_tokens_per_turn: int = 25
     padding: str = "left"
     device_map: str = "auto"
     device: Optional[str] = None
@@ -95,11 +95,10 @@ def load_tokenizer_and_model(config):
 
 
 class Preprocess(Worker):
-    def forward(self, params):
-        prompt = params.get("prompt")
-        if prompt is None:
+    def forward(self, params: dict):
+        if params.get("prompt") is None:
             raise ValidationError("prompt is required")
-        return prompt
+        return params
 
 
 class FlyteLlama(SSEWorker):
@@ -127,18 +126,21 @@ class FlyteLlama(SSEWorker):
         self.pipeline = load_tokenizer_and_model(self.config)
         # self.example = ["Flyte is a"]  # warmup
 
-    def forward(self, prompts):
-        logger.info(f"generate text for {prompts}")
+    def forward(self, params: dict):
+        prompt = params.get("prompt")
+        n_tokens = params.get("n_tokens", 1000)
+        logger.info(f"generate text for {prompt}")
 
         tokens = self.pipeline.tokenizer(
-            prompts,
-            add_special_tokens=False,
+            prompt,
+            add_special_tokens=True,
             return_tensors="pt",
         )
         token_buffer = tokens["input_ids"]
         if torch.cuda.is_available():
             token_buffer = token_buffer.to("cuda")
 
+        new_tokens = 0
         for _ in range(self.config.n_turns):
             token_buffer = self.pipeline.model.generate(
                 token_buffer,
@@ -153,7 +155,11 @@ class FlyteLlama(SSEWorker):
                 gen_text = self.pipeline.tokenizer.decode(token_buffer[i])
                 self.send_stream_event(gen_text, index=i)
 
-        return prompts
+            new_tokens += self.config.n_tokens_per_turn
+            if new_tokens >= n_tokens:
+                break
+
+        return params
 
 
 if __name__ == "__main__":

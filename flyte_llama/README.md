@@ -288,6 +288,7 @@ the model:
 ```bash
 python client_sse.py \
     --prompt "The code snippet below shows a basic Flyte workflow" \
+    --n-tokens 250 \
     --output-file output.txt \
     --api-key $MODELZ_API_KEY \
     --deployment-key <deployment_key>
