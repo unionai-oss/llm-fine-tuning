@@ -94,11 +94,6 @@ def load_tokenizer_and_model(config):
 
 class Preprocess(Worker):
     def forward(self, params):
-        if isinstance(params, list):
-            if params[0].get("prompt") is None:
-                raise ValidationError("prompt is required")
-            return [p.get("prompt") for p in params]
-
         prompt = params.get("prompt")
         if prompt is None:
             raise ValidationError("prompt is required")
@@ -165,7 +160,7 @@ if __name__ == "__main__":
     num_workers = 2
     kwargs = dict(
         num=num_workers,
-        max_batch_size=4,
+        max_batch_size=1,
         timeout=180_000,
         env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * num_workers,
     )

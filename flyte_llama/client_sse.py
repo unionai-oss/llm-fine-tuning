@@ -26,7 +26,7 @@ def sse_connection(
     print("🔎 Checking availability")
     for i in range(N_RETRIES):
         if i > 0:
-            print(f"🔄 Retry: {i}", end="", flush=True)
+            print(f"🔄 Retry: {i}", end="\r", flush=True)
 
         with connect_sse(
             httpx_client,
