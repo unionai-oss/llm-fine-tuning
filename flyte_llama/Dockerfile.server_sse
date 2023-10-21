@@ -23,6 +23,6 @@ ENV PYTHONPATH "/root:$PYTHONPATH"
 
 ARG HF_TOKEN
 ENV HF_AUTH_TOKEN=${HF_TOKEN}
-RUN python server_sse.py --dry-run
+# RUN python server_sse.py --dry-run
 
 ENTRYPOINT [ "python", "server_sse.py", "--timeout", "180000" ]

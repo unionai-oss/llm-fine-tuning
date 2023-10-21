@@ -42,6 +42,7 @@ class ServingConfig:
     n_tokens_per_turn: int = 10
     padding: str = "left"
     device_map: str = "auto"
+    device: Optional[str] = None
     use_float16: bool = False
     use_4bit: bool = False
 
@@ -59,9 +60,11 @@ def load_tokenizer_and_model(config):
     dtype = torch.float16 if config.use_float16 else torch.float32
 
     # load pre-trained model
+    device = os.environ["CUDA_VISIBLE_DEVICES"]
     load_model_params = {
         "torch_dtype": dtype,
-        "device_map": config.device_map,
+        "device": device,
+        # "device_map": config.device_map,
     }
     if config.use_4bit:
         load_model_params = {
@@ -88,7 +91,9 @@ def load_tokenizer_and_model(config):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        device_map=config.device_map,
+        device=device,
+        # device_map=config.device_map,
+
     )
 
 
@@ -105,25 +110,25 @@ class FlyteLlama(SSEWorker):
     def __init__(self):
 
         if torch.cuda.is_available():
-            device_map = "auto"
+            # device_map = "auto"
             use_float16 = True
             use_4bit = True
         else:
-            device_map = None
+            # device_map = None
             use_float16 = False
             use_4bit = False
 
         self.config = ServingConfig(
             model_path="codellama/CodeLlama-7b-hf",
             adapter_path="unionai/FlyteLlama-v0-7b-hf-flyte-repos",
-            device_map=device_map,
+            # device_map=device_map,
             use_float16=use_float16,
             use_4bit=use_4bit,
             n_turns=100,
             n_tokens_per_turn=10,
         )
         self.pipeline = load_tokenizer_and_model(self.config)
-        self.example = ["Flyte is a"]  # warmup
+        # self.example = ["Flyte is a"]  # warmup
 
     def forward(self, prompts):
         logger.info(f"generate text for {prompts}")
@@ -135,7 +140,7 @@ class FlyteLlama(SSEWorker):
         )
         token_buffer = tokens["input_ids"]
         if torch.cuda.is_available():
-            token_buffer = token_buffer.to("cuda")
+            token_buffer = token_buffer.to(self.config.device)
 
         for _ in range(self.config.n_turns):
             token_buffer = self.pipeline.model.generate(
@@ -157,12 +162,21 @@ class FlyteLlama(SSEWorker):
 if __name__ == "__main__":
     server = Server()
 
-    num_workers = 2
+    def get_env(cid: int) -> dict:
+        device_dict = {}
+        if torch.cuda.is_available():
+            device_dict["CUDA_VISIBLE_DEVICES"] = str(cid)
+        return {
+            "HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"],
+            **device_dict,
+        }
+    
+    num_devices = torch.cuda.device_count()
     kwargs = dict(
-        num=num_workers,
+        num=(1 if num_devices == 0 else num_devices),
         max_batch_size=1,
         timeout=180_000,
-        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * num_workers,
+        env=[get_env(i) for i in range(num_devices or 1)],
     )
     server.append_worker(Preprocess, **kwargs)
     server.append_worker(FlyteLlama, **kwargs)
