@@ -16,7 +16,7 @@ import os
 import time
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List
+from typing import List, Optional
 
 import torch
 import huggingface_hub as hh
@@ -60,11 +60,10 @@ def load_tokenizer_and_model(config):
     dtype = torch.float16 if config.use_float16 else torch.float32
 
     # load pre-trained model
-    device = os.environ["CUDA_VISIBLE_DEVICES"]
     load_model_params = {
         "torch_dtype": dtype,
-        "device": device,
-        # "device_map": config.device_map,
+        # "device": device,
+        "device_map": config.device_map,
     }
     if config.use_4bit:
         load_model_params = {
@@ -91,9 +90,7 @@ def load_tokenizer_and_model(config):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        device=device,
-        # device_map=config.device_map,
-
+        device_map=config.device_map,
     )
 
 
@@ -110,18 +107,18 @@ class FlyteLlama(SSEWorker):
     def __init__(self):
 
         if torch.cuda.is_available():
-            # device_map = "auto"
+            device_map = "auto"
             use_float16 = True
             use_4bit = True
         else:
-            # device_map = None
+            device_map = None
             use_float16 = False
             use_4bit = False
 
         self.config = ServingConfig(
             model_path="codellama/CodeLlama-7b-hf",
             adapter_path="unionai/FlyteLlama-v0-7b-hf-flyte-repos",
-            # device_map=device_map,
+            device_map=device_map,
             use_float16=use_float16,
             use_4bit=use_4bit,
             n_turns=100,
@@ -140,7 +137,7 @@ class FlyteLlama(SSEWorker):
         )
         token_buffer = tokens["input_ids"]
         if torch.cuda.is_available():
-            token_buffer = token_buffer.to(self.config.device)
+            token_buffer = token_buffer.to("cuda")
 
         for _ in range(self.config.n_turns):
             token_buffer = self.pipeline.model.generate(
@@ -152,7 +149,7 @@ class FlyteLlama(SSEWorker):
             if token_buffer.shape[-1] >= self.config.model_max_length:
                 token_buffer = token_buffer[:, -self.config.model_max_length:]
 
-            for i in range(len(prompts)):
+            for i in range(token_buffer.shape[0]):
                 gen_text = self.pipeline.tokenizer.decode(token_buffer[i])
                 self.send_stream_event(gen_text, index=i)
 
