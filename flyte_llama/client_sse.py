@@ -26,7 +26,7 @@ def sse_connection(
     print("🔎 Checking availability")
     for i in range(N_RETRIES):
         if i > 0:
-            print(f"Retry: {i}")
+            print(f"🔄 Retry: {i}", end="", flush=True)
 
         with connect_sse(
             httpx_client,
@@ -41,6 +41,7 @@ def sse_connection(
                 time.sleep(SLEEP_DURATION)
                 continue
 
+            print("✅ Ready")
             yield event_source
             break
 

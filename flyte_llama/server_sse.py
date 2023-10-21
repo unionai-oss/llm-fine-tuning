@@ -94,6 +94,11 @@ def load_tokenizer_and_model(config):
 
 class Preprocess(Worker):
     def forward(self, params):
+        if isinstance(params, list):
+            if params[0].get("prompt") is None:
+                raise ValidationError("prompt is required")
+            return [p.get("prompt") for p in params]
+
         prompt = params.get("prompt")
         if prompt is None:
             raise ValidationError("prompt is required")
@@ -123,7 +128,7 @@ class FlyteLlama(SSEWorker):
             n_tokens_per_turn=10,
         )
         self.pipeline = load_tokenizer_and_model(self.config)
-        # self.example = ["Flyte is a"] * 4  # warmup (bs=4)
+        self.example = ["Flyte is a"]  # warmup
 
     def forward(self, prompts):
         logger.info(f"generate text for {prompts}")
