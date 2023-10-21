@@ -57,6 +57,7 @@ python flyte_llama/train.py \
     --data_dir=~/datasets/flyte_llama \
     --output_dir=~/models/flyte_llama
 ```
+
 </p>
 </details>
 
@@ -111,6 +112,39 @@ pyflyte --config $FLYTECTL_CONFIG \
     --config config/flyte_llama_7b_qlora_v0.json \
     --pretrained_adapter s3://path/to/checkpoint
 ```
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 7b Instruct Qlora</summary>
+<p>
+
+**Train:**
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py train_workflow \
+    --config config/flyte_llama_7b_instruct_qlora_v0.json
+```
+
+**Publish:**
+
+```bash
+pyflyte --config $FLYTECTL_CONFIG \
+    run --remote \
+    --copy-all \
+    --project $FLYTE_PROJECT \
+    --image $IMAGE \
+    flyte_llama/workflows.py publish_model \
+    --config config/flyte_llama_7b_instruct_qlora_v0.json \
+    --model_dir s3://path/to/model
+```
+
+
 </p>
 </details>
 
@@ -244,7 +278,7 @@ python deploy.py \
     --api-key $MODELZ_API_KEY \
     --deployment-name flyte-llama-sse-$VERSION \
     --image $SERVING_SSE_IMAGE \
-    --server-resource "nvidia-ada-l4-2-24c-96g" \
+    --server-resource "nvidia-ada-l4-4-48c-192g" \
     --stream
 ```
 

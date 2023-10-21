@@ -59,6 +59,7 @@ class TrainerConfig:
     output_dir: str = "./output"
     checkpoint_dir: Optional[str] = None
     num_epochs: int = 20
+    max_steps: int = -1
     batch_size: int = 8
     test_size: float = 0.01
     model_max_length: int = 1024
@@ -197,6 +198,7 @@ def train(
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         dataloader_num_workers=0,
         num_train_epochs=config.num_epochs,
+        max_steps=config.max_steps,
         logging_steps=1,
         optim=optim,
         report_to=config.report_to,
