@@ -24,6 +24,7 @@ def sse_connection(
     n_tokens: int,
     timeout: typing.Union[int, httpx.Timeout],
 ):
+    print("\n🦙 Invoking Flyte Llama:")
     print("🔎 Checking availability")
     for i in range(N_RETRIES):
         if i > 0:
@@ -72,6 +73,7 @@ def infer_stream(
         n_tokens,
         timeout=timeout,
     ) as event_source:
+        print("▶️ Output")
         print(prompt, end="", flush=True)
         for sse in event_source.iter_sse():
             msg = sse.data
