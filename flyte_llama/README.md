@@ -377,3 +377,4 @@ to generate the examples (this is somewhat what a human does to generate code ex
 - [Code LLama paper](https://ai.meta.com/research/publications/code-llama-open-foundation-models-for-code/)
 - [Causal Masked Multimodal Model paper](https://arxiv.org/abs/2201.07520)
 - [Fill in the Middle paper](https://arxiv.org/abs/2207.14255)
+- [LLM Vscode](https://github.com/huggingface/llm-vscode)
