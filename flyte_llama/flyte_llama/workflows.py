@@ -11,10 +11,10 @@ from flytekit.types.directory import FlyteDirectory
 import flyte_llama
 
 
-# Flyte Development Tenant
-SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
+# Union Tenant
+SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
+WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
+HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
 
 @task(
@@ -60,9 +60,14 @@ def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirector
 def train(
     dataset: FlyteDirectory,
     config: flyte_llama.train.TrainerConfig,
+    pretrained_adapter: Optional[FlyteDirectory] = None,
 ) -> FlyteDirectory:
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         logger.info(f"Training Flyte Llama with params:\n{config}")
+
+    if pretrained_adapter is not None:
+        print(f"Downloading pretrained adapter {pretrained_adapter}")
+        pretrained_adapter.download()
 
     wandb_run_name = os.environ.get("FLYTE_INTERNAL_EXECUTION_ID", "local")
     os.environ["WANDB_RUN_ID"] = wandb_run_name
@@ -78,14 +83,56 @@ def train(
     except Exception:
         hf_auth_token = None
 
-    flyte_llama.train.train(config, hf_auth_token)
+    flyte_llama.train.train(config, pretrained_adapter, hf_auth_token)
     return FlyteDirectory(path=str(config.output_dir))
 
 
 @workflow
 def train_workflow(
     config: flyte_llama.train.TrainerConfig,
+    pretrained_adapter: Optional[FlyteDirectory] = None,
 ) -> FlyteDirectory:
     dataset = create_dataset()
-    model = train(dataset=dataset, config=config)
+    model = train(
+        dataset=dataset,
+        config=config,
+        pretrained_adapter=pretrained_adapter,
+    )
     return model
+
+
+@task(
+    retries=3,
+    cache=True,
+    cache_version="0.0.4",
+    requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="64Gi"),
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+    ],
+)
+def publish_model(
+    model_dir: FlyteDirectory,
+    config: flyte_llama.train.TrainerConfig,
+) -> str:
+    model_dir.download()
+    model_dir = Path(model_dir.path)
+    ctx = current_context()
+
+    try:
+        hf_auth_token = ctx.secrets.get(SECRET_GROUP, HF_HUB_API_SECRET_KEY)
+    except Exception:
+        hf_auth_token = None
+
+    return flyte_llama.publish.publish_to_hf_hub(model_dir, config, hf_auth_token)
+
+
+@workflow
+def publish_model_workflow(
+    model_dir: FlyteDirectory,
+    config: flyte_llama.train.TrainerConfig,
+) -> str:
+    return publish_model(model_dir=model_dir, config=config)

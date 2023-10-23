@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 ```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export FLYTECTL_CONFIG=~/.flyte/dev-config.yaml  # replace with your flyte/union cloud config
+export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0

@@ -19,5 +19,23 @@
     "lora_alpha": 16,
     "lora_target_modules": ["q_proj", "k_proj", "v_proj"],
     "lora_dropout": 0.05,
-    "debug": false
+    "debug": false,
+    "publish_config": {
+        "repo_id": "unionai/FlyteLlama-v0-13b-hf-flyte-repos",
+        "readme": "# FlyteLlama-v0-13b-hf fine-tuned on Flyte repos",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": [
+                "pytorch",
+                "causal-lm",
+                "llama2",
+                "code llama",
+                "fine-tuning",
+                "flyte llama",
+                "flyte repo dataset"
+            ]
+        }
+    }
 }
