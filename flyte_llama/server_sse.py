@@ -13,10 +13,8 @@ envd build -f :serving --output type=image,name=ghcr.io/unionai-oss/modelz-flyte
 """
 
 import os
-import time
 from dataclasses import dataclass
-from io import BytesIO
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import huggingface_hub as hh
@@ -28,7 +26,6 @@ from transformers import (
 )
 
 from mosec import Server, Worker, SSEWorker, ValidationError, get_logger
-from mosec.mixin import MsgpackMixin
 
 logger = get_logger()
 
