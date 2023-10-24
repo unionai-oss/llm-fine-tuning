@@ -1,6 +1,7 @@
 import time
 import typing
 from contextlib import contextmanager
+from pathlib import Path
 from urllib.parse import urljoin
 
 import httpx
@@ -53,6 +54,7 @@ def infer_stream(
     n_tokens: int,
     api_key: str,
     deployment_key: str,
+    output_file: str,
     timeout: typing.Union[int, httpx.Timeout] = DEFAULT_TIMEOUT,
     **kwargs,
 ):
@@ -80,20 +82,28 @@ def infer_stream(
             if msg.startswith("<s>"):
                 msg = msg[4:]
             if "</s>" in msg:
+                msg = msg[: msg.index("</s>")]
                 break
             print_msg = msg[len(prev_msg):]
             print(print_msg, end="", flush=True)
             prev_msg = msg
 
+    if output_file:
+        output_file = Path(output_file)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with output_file.open("w") as f:
+            f.write(msg)
+
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--n-tokens", required=False, default=500, type=int)
-    parser.add_argument("--output-file", required=True)
-    parser.add_argument("--api-key", required=True)
+    parser.add_argument("--output-file", required=False, default=None)
+    parser.add_argument("--api-key", required=False, default=os.environ.get("MODELZ_API_KEY"))
     parser.add_argument("--deployment-key", required=True)
     parser.add_argument("--n-retries", default=N_RETRIES, type=int)
     parser.add_argument("--sleep-interval", default=None, type=int)

@@ -69,8 +69,7 @@ python flyte_llama/train.py \
 **Train:**
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -81,8 +80,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 **Publish:**
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -103,8 +101,7 @@ Pass in the `--pretrained_adapter` flag to continue training from a previous
 adapter checkpoint. This is typically an s3 path produced by `train_workflow`.
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -122,8 +119,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 **Train:**
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -134,8 +130,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 **Publish:**
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -153,8 +148,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 <p>
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
@@ -169,8 +163,7 @@ pyflyte --config $FLYTECTL_CONFIG \
 <p>
 
 ```bash
-pyflyte --config $FLYTECTL_CONFIG \
-    run --remote \
+pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \

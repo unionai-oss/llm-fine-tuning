@@ -102,8 +102,6 @@ if __name__ == "__main__":
                 inputs,
                 pad_token_id=pipe.tokenizer.eos_token_id,
                 max_new_tokens=config.max_new_tokens,
-                # do_sample=True,
-                # temperature=0.2,
             )
 
             if inputs.shape[-1] >= config.model_max_length:

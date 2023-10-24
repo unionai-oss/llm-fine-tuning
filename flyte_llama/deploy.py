@@ -82,10 +82,10 @@ if __name__ == "__main__":
     import os
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--user-id", type=str, required=True)
-    parser.add_argument("--api-key", type=str, required=True)
     parser.add_argument("--deployment-name", type=str, required=True)
     parser.add_argument("--image", type=str, required=True)
+    parser.add_argument("--user-id", type=str, required=False, default=os.environ.get("MODELZ_USER_ID"))
+    parser.add_argument("--api-key", type=str, required=False, default=os.environ.get("MODELZ_API_KEY"))
     parser.add_argument(
         "--server-resource",
         type=str,
@@ -96,6 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("--stream", action="store_true", default=False)
 
     args = parser.parse_args()
+
 
     deploy_model(
         **vars(args),
