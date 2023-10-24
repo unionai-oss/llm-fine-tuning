@@ -21,8 +21,8 @@
     "lora_dropout": 0.05,
     "debug": false,
     "publish_config": {
-        "repo_id": "unionai/FlyteLlama-v0-7b-hf",
-        "readme": "# FlyteLlama-v0-7b-hf fine-tuned on Flyte repos",
+        "repo_id": "unionai/flyte-pythia-70m-deduped-v0",
+        "readme": "# flyte-pythia-70m fine-tuned on Flyte repos",
         "language": "python",
         "model_card": {
             "language": ["en"],
@@ -30,10 +30,8 @@
             "tags": [
                 "pytorch",
                 "causal-lm",
-                "llama2",
-                "code llama",
+                "pythia",
                 "fine-tuning",
-                "flyte llama",
                 "flyte repo dataset"
             ]
         }
