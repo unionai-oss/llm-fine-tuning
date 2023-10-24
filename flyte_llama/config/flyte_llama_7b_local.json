@@ -1,0 +1,41 @@
+{
+    "model_path": "EleutherAI/pythia-70m-deduped-v0",
+    "output_dir": "~/models/flyte_llama",
+    "checkpoint_dir": null,
+    "num_epochs": 1,
+    "max_steps": 20,
+    "batch_size": 1,
+    "test_size": 0.001,
+    "model_max_length": 512,
+    "seed": 41,
+    "report_to": "none",
+    "device_map": null,
+    "gradient_accumulation_steps": 1,
+    "padding": "left",
+    "dataloader_num_proc": 2,
+    "use_fp16": false,
+    "use_4bit": false,
+    "use_qlora": false,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "debug": false,
+    "publish_config": {
+        "repo_id": "unionai/FlyteLlama-v0-7b-hf",
+        "readme": "# FlyteLlama-v0-7b-hf fine-tuned on Flyte repos",
+        "language": "python",
+        "model_card": {
+            "language": ["en"],
+            "license": "apache-2.0",
+            "tags": [
+                "pytorch",
+                "causal-lm",
+                "llama2",
+                "code llama",
+                "fine-tuning",
+                "flyte llama",
+                "flyte repo dataset"
+            ]
+        }
+    }
+}

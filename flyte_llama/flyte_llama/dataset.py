@@ -5,6 +5,7 @@ model fine-tuning.
 """
 
 import itertools
+import os
 import json
 import shutil
 from pathlib import Path
@@ -14,6 +15,13 @@ from typing import Iterable, Optional
 from git import Repo
 
 
+DEFAULT_EXTENSIONS = [
+    ".py", ".md", ".rst", ".go", ".yaml", ".yml", ".json", ".js", ".tsx", ".ts",
+    ".sh", ".txt", ".proto",
+]
+DEFAULT_INCLUDE_FILES = [
+    "Dockerfile",
+]
 ROOT_URL = "https://github.com/"
 REPO_URLS = [
     f"{ROOT_URL}flyteorg/flyte",
@@ -32,12 +40,14 @@ def iter_github_documents(
     url: str,
     repo_cache_dir: Path,
     extensions: Optional[list[str]] = None,
+    include_files: Optional[list[str]] = None,
     exclude_files: Optional[list[str]] = None,
     exclude_patterns: Optional[list[str]] = None,
 ) -> Iterable[str]:
     """Fetch documents from a github url."""
-    extensions = extensions or [".py", ".md", ".rst"]
-    exclude_files = frozenset(exclude_files or ["__init__.py"])
+    extensions = extensions or DEFAULT_EXTENSIONS
+    include_files = frozenset(include_files or DEFAULT_INCLUDE_FILES)
+    exclude_files = frozenset(exclude_files or [])
     exclude_patterns = exclude_patterns or []
     repo_name = url.split("/")[-1]
 
@@ -51,14 +61,19 @@ def iter_github_documents(
     git_sha = repo.head.commit.hexsha
     git_dir = Path(repo_cache_dir)
 
-    exclude_from_patterns = [
+    exclude_from_patterns = frozenset([
         *itertools.chain(*(git_dir.glob(p) for p in exclude_patterns))
-    ]
+    ])
 
     for file in itertools.chain(
-        *[git_dir.glob(f"**/*{ext}") for ext in extensions]
+        *[git_dir.glob(f"{repo_name}/**/*{ext}") for ext in extensions]
     ):
-        if file.name in exclude_files or file in exclude_from_patterns:
+        if os.path.getsize(file) == 0:
+            continue
+        if (
+            file.name not in include_files
+            and (file.name in exclude_files or file in exclude_from_patterns)
+        ):
             continue
 
         github_url = f"{url}/blob/{git_sha}/{file.relative_to(git_dir)}"
@@ -113,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("--output-path", type=str, required=True, default="~/datasets/flyte_llama")
     args = parser.parse_args()
 
-    output_path = Path(args.path)
+    output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     create_dataset(
         REPO_URLS,

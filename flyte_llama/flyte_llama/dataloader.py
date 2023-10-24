@@ -11,8 +11,8 @@ class Example(TypedDict):
 
 
 def iter_reader(data_path: Path) -> Iterable[Example]:
-    for fp in data_path.glob("*/*"):
-        if "metadata" in fp.parts:
+    for fp in data_path.glob("**/*"):
+        if "metadata" in fp.parts or fp.is_dir():
             continue
         with fp.open() as f:
             yield Example({"text": f.read()})

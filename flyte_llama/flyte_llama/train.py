@@ -96,11 +96,16 @@ def train(
     )
     tokenizer.pad_token = tokenizer.eos_token
 
+    if torch.cuda.is_available():
+        dtype = torch.bfloat16
+    else:
+        dtype = torch.float32
+
     # load pre-trained model
     load_model_params = {
         **kwargs,
         "use_auth_token": hf_auth_token,
-        "torch_dtype": torch.bfloat16,
+        "torch_dtype": dtype,
         "device_map": config.device_map,
     }
     if config.use_4bit:
@@ -114,7 +119,7 @@ def train(
                 llm_int8_has_fp16_weight=False,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_compute_dtype=dtype,
             ),
             "load_in_4bit": True,
         }

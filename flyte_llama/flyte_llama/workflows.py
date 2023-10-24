@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from flytekit import task, workflow, current_context, Resources, Secret
+from flytekit import task, workflow, current_context, Resources, Secret, ImageSpec
 from flytekit.loggers import logger
 from flytekit.types.directory import FlyteDirectory
 
@@ -17,9 +17,21 @@ WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
 HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
 
+image_spec = ImageSpec(
+    name="flyte-llama-qlora",
+    apt_packages=["git"],
+    registry="ghcr.io/unionai-oss",
+    requirements="requirements.txt",
+    python_version="3.9",
+    cuda="11.7.1",
+    env={"VENV": "/opt/venv"},
+)
+
+
 @task(
     cache=True,
-    cache_version="0",
+    cache_version="1",
+    container_image=image_spec,
     requests=Resources(mem="8Gi", cpu="2", ephemeral_storage="8Gi"),
 )
 def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirectory:
@@ -37,8 +49,9 @@ def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirector
 @task(
     retries=3,
     cache=True,
-    cache_version="0.0.19",
-    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="200Gi"),
+    cache_version="20",
+    container_image=image_spec,
+    requests=Resources(mem="120Gi", cpu="44", gpu="8", ephemeral_storage="100Gi"),
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
@@ -73,14 +86,17 @@ def train(
     os.environ["WANDB_RUN_ID"] = wandb_run_name
 
     ctx = current_context()
-    os.environ["WANDB_API_KEY"] = ctx.secrets.get(SECRET_GROUP, WANDB_API_SECRET_KEY)
+    try:
+        os.environ["WANDB_API_KEY"] = ctx.secrets.get(SECRET_GROUP, WANDB_API_SECRET_KEY)
+    except ValueError:
+        pass
 
     dataset.download()
     config.data_dir = dataset.path
 
     try:
         hf_auth_token = ctx.secrets.get(SECRET_GROUP, HF_HUB_API_SECRET_KEY)
-    except Exception:
+    except ValueError:
         hf_auth_token = None
 
     flyte_llama.train.train(config, pretrained_adapter, hf_auth_token)
@@ -105,6 +121,7 @@ def train_workflow(
     retries=3,
     cache=True,
     cache_version="0.0.4",
+    container_image=image_spec,
     requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="64Gi"),
     secret_requests=[
         Secret(
