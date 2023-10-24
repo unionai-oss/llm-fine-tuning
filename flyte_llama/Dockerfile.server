@@ -21,8 +21,7 @@ COPY ./server.py /root
 
 ENV PYTHONPATH "/root:$PYTHONPATH"
 
-ARG HF_TOKEN
-ENV HF_AUTH_TOKEN=${HF_TOKEN}
-RUN python server.py --dry-run
+# ARG HF_AUTH_TOKEN
+# RUN python server.py --dry-run
 
 ENTRYPOINT [ "python", "server.py", "--timeout", "180000" ]

@@ -174,12 +174,12 @@ if __name__ == "__main__":
             **device_dict,
         }
     
-    num_devices = torch.cuda.device_count()
+    num_devices = torch.cuda.device_count() or 1
     kwargs = dict(
-        num=(1 if num_devices == 0 else num_devices),
+        num=num_devices,
         max_batch_size=1,
         timeout=180_000,
-        env=[get_env(i) for i in range(num_devices or 1)],
+        env=[get_env(i) for i in range(num_devices)],
     )
     server.append_worker(Preprocess, **kwargs)
     server.append_worker(FlyteLlama, **kwargs)

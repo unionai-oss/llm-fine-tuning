@@ -1,19 +1,18 @@
 # syntax=v1
 
-
 def basic():
+    install.cuda(version="11.7.1")
     install.apt_packages(["git"])
     install.python()
     install.python_packages(requirements="requirements-server.txt")
-
+    runtime.expose(envd_port=8000, host_port=8000, service="flyte-llama")
 
 def build():
-    base(image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel", dev=True)
-    basic()
+    base(image="ubuntu20.04", dev=True)
     runtime.expose(envd_port=8000, host_port=8000, service="flyte-llama")
 
 
 def serving():
     basic()
     io.copy("server.py", "/")
-    config.entrypoint(["python", "/server.py", "--timeout", "30000"])
+    config.entrypoint(["python", "/server.py", "--timeout", "180000"])

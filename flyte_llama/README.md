@@ -183,7 +183,7 @@ Create a `secrets.txt` file to hold your sensitive credentials:
 # do this once
 echo MODELZ_USER_ID="<replace>" >> secrets.txt
 echo MODELZ_API_KEY="<replace>" >> secrets.txt
-echo HF_TOKEN="<replace>" >> secrets.txt
+echo HF_AUTH_TOKEN="<replace>" >> secrets.txt
 ```
 
 <details>
@@ -201,14 +201,7 @@ export SERVING_IMAGE=ghcr.io/unionai-oss/modelz-flyte-llama-serving:$VERSION
 Build the serving image:
 
 ```bash
-docker build . -f Dockerfile.server \
-    --build-arg "HF_TOKEN=$HF_TOKEN" \
-    -t $SERVING_IMAGE
-```
-
-Push it:
-
-```bash
+docker build . -f Dockerfile.server -t $SERVING_IMAGE
 docker push $SERVING_IMAGE
 ```
 
@@ -216,8 +209,6 @@ Deploy:
 
 ```bash
 python deploy.py \
-    --user-id $MODELZ_USER_ID \
-    --api-key $MODELZ_API_KEY \
     --deployment-name flyte-llama-$VERSION \
     --image $SERVING_IMAGE \
     --server-resource "nvidia-ada-l4-2-24c-96g"
@@ -230,7 +221,6 @@ the model:
 python client.py \
     --prompt "The code snippet below shows a basic Flyte workflow" \
     --output-file output.txt \
-    --api-key $MODELZ_API_KEY \
     --deployment-key <deployment_key>
 ```
 
@@ -252,14 +242,7 @@ export SERVING_SSE_IMAGE=ghcr.io/unionai-oss/modelz-flyte-llama-serving-sse:$VER
 Build the serving image:
 
 ```bash
-docker build . -f Dockerfile.server_sse \
-    --build-arg "HF_TOKEN=$HF_TOKEN" \
-    -t $SERVING_SSE_IMAGE
-```
-
-Push it:
-
-```bash
+docker build . -f Dockerfile.server_sse -t $SERVING_SSE_IMAGE
 docker push $SERVING_SSE_IMAGE
 ```
 
@@ -267,8 +250,6 @@ Deploy:
 
 ```bash
 python deploy.py \
-    --user-id $MODELZ_USER_ID \
-    --api-key $MODELZ_API_KEY \
     --deployment-name flyte-llama-sse-$VERSION \
     --image $SERVING_SSE_IMAGE \
     --server-resource "nvidia-ada-l4-4-48c-192g" \
@@ -283,7 +264,6 @@ python client_sse.py \
     --prompt "The code snippet below shows a basic Flyte workflow" \
     --n-tokens 250 \
     --output-file output.txt \
-    --api-key $MODELZ_API_KEY \
     --deployment-key <deployment_key>
 ```
 

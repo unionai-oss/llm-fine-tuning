@@ -8,14 +8,14 @@ docker build . -f Dockerfile.server -t ghcr.io/unionai-oss/modelz-flyte-llama-se
 with envd:
 
 ```
-envd build -f :serving --output type=image,name=ghcr.io/unionai-oss/modelz-flyte-llama-serving:v0,push=true
+envd build -f server.envd:serving --output type=image,name=ghcr.io/unionai-oss/modelz-flyte-llama-serving:$VERSION,push=true
 ```
 """
 
 import os
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List
+from typing import List, Optional
 
 import torch
 import huggingface_hub as hh
@@ -35,7 +35,7 @@ logger = get_logger()
 @dataclass
 class ServingConfig:
     model_path: str
-    adapter_path: str
+    adapter_path: Optional[str] = None
     model_max_length: int = 1024
     max_gen_length: int = 1024
     padding: str = "right"
@@ -78,7 +78,7 @@ def load_pipeline(config):
         }
 
     model = AutoModelForCausalLM.from_pretrained(
-        config.adapter_path,
+        config.adapter_path or config.model_path,
         **load_model_params,
     )
 
@@ -91,8 +91,6 @@ def load_pipeline(config):
 
 
 class FlyteLlama(MsgpackMixin, Worker):
-
-    resp_mime_type = "text/plain"
 
     def __init__(self):
 
@@ -132,12 +130,14 @@ class FlyteLlama(MsgpackMixin, Worker):
 
 if __name__ == "__main__":
     server = Server()
+
+    num_devices = torch.cuda.device_count() or 1
     server.append_worker(
         FlyteLlama,
-        num=4,
+        num=num_devices,
         max_batch_size=4,
         max_wait_time=10,
         timeout=180_000,
-        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * 4,
+        env=[{"HF_AUTH_TOKEN": os.environ["HF_AUTH_TOKEN"]}] * num_devices,
     )
     server.run()
