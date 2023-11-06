@@ -16,11 +16,9 @@ RUN apt-get update && apt-get install build-essential git -y
 COPY ./requirements.txt /root/requirements.txt
 WORKDIR /root
 
-# Pod tasks should be exposed in the default image
 RUN pip install -r requirements.txt
-RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed==0.10.0 --force-reinstall
-RUN pip install multiprocess==0.70.11.1
-RUN pip install git+https://github.com/EleutherAI/lm-evaluation-harness
+# reinstall deepspeed to pre-compile plugins
+RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed==0.12.2 --force-reinstall
 
 COPY . /root
 WORKDIR /root
