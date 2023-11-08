@@ -10,7 +10,7 @@ pyyaml
 sentencepiece
 transformers[torch,deepspeed]
 tokenizers
-torch
+torch==2.1.0
 wandb
 flytekit
 flytekitplugins-envd

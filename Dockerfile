@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
 WORKDIR /root
 ENV VENV /opt/venv
@@ -15,7 +15,12 @@ RUN pip install -r requirements.txt
 # install this here due to 
 RUN pip install apache_beam
 # reinstall deepspeed to pre-compile plugins
-RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 DS_BUILD_OPS=1 DS_BUILD_AIO=0 DS_BUILD_SPARSE_ATTN=0 pip install deepspeed --force-reinstall
+RUN DS_BUILD_CPU_ADAM=1 \
+    DS_BUILD_UTILS=1 \
+    DS_BUILD_OPS=1 \
+    DS_BUILD_AIO=0 \
+    DS_BUILD_SPARSE_ATTN=0 \
+    pip install deepspeed --force-reinstall
 
 COPY . /root
 WORKDIR /root

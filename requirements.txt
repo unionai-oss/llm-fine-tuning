@@ -20,7 +20,7 @@ attrs==23.1.0             # via aiohttp, visions
 azure-core==1.29.5        # via adlfs, azure-identity, azure-storage-blob
 azure-datalake-store==0.0.53  # via adlfs
 azure-identity==1.15.0    # via adlfs
-azure-storage-blob==12.18.3  # via adlfs
+azure-storage-blob==12.19.0  # via adlfs
 binaryornot==0.4.4        # via cookiecutter
 bitsandbytes==0.41.1      # via -r requirements.in
 botocore==1.31.64         # via aiobotocore
@@ -64,7 +64,7 @@ fsspec[http]==2023.10.0   # via adlfs, datasets, flytekit, gcsfs, huggingface-hu
 gcsfs==2023.10.0          # via flytekit
 gitdb==4.0.11             # via gitpython
 gitpython==3.1.40         # via flytekit, wandb
-google-api-core==2.12.0   # via google-cloud-core, google-cloud-storage
+google-api-core==2.13.0   # via google-cloud-core, google-cloud-storage
 google-auth==2.23.4       # via gcsfs, google-api-core, google-auth-oauthlib, google-cloud-core, google-cloud-storage, kubernetes
 google-auth-oauthlib==1.1.0  # via gcsfs
 google-cloud-core==2.3.3  # via google-cloud-storage
@@ -123,7 +123,6 @@ packaging==23.2           # via accelerate, datasets, deepspeed, docker, hugging
 pandas==1.5.3             # via datasets, flytekit, pandera, phik, seaborn, statsmodels, visions, ydata-profiling
 pandera==0.17.2           # via -r requirements.in
 parso==0.8.3              # via jedi
-pathtools==0.1.2          # via wandb
 patsy==0.5.3              # via statsmodels
 peft==0.6.0               # via -r requirements.in
 pexpect==4.8.0            # via ipython
@@ -190,7 +189,7 @@ typing-extensions==4.8.0  # via azure-core, azure-storage-blob, flytekit, huggin
 typing-inspect==0.9.0     # via dataclasses-json, pandera
 urllib3==1.26.18          # via botocore, docker, flytekit, kubernetes, requests, sentry-sdk
 visions[type_image_path]==0.7.5  # via ydata-profiling
-wandb==0.15.12            # via -r requirements.in
+wandb==0.16.0             # via -r requirements.in
 wcwidth==0.2.9            # via prompt-toolkit
 websocket-client==1.6.4   # via docker, kubernetes
 wheel==0.41.3             # via flytekit
