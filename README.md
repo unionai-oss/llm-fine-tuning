@@ -21,6 +21,7 @@ export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
 export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:de445a0
+export IMAGE=ghcr.io/unionai-oss/unionai-llm-fine-tuning:c7df70e
 ```
 
 ## 🐳 Container Build [Optional]

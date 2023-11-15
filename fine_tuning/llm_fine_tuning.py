@@ -396,12 +396,12 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.14",
+    cache_version="0.0.15",
     task_config=Elastic(
         nnodes=3,
         nproc_per_node=8,
         rdzv_configs={"timeout": 36000, "join_timeout": 36000},
-        max_restarts=1,
+        max_restarts=3,
     ),
     requests=Resources(mem="100Gi", cpu="64", gpu="8", ephemeral_storage="100Gi"),
     pod_template=finetuning_pod_template,
@@ -638,17 +638,8 @@ def quantize_model(
         load_in_8bit=True,
         device_map=device_map,
     )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        config.base_model,
-        use_fast=True,
-        cache_dir=config.cache_dir,
-        model_max_length=config.model_max_length,
-        padding_side="right",
-        pad_token=DEFAULT_PAD_TOKEN,
-    )
     output_dir = "/tmp"
-    trainer = Trainer(model=model, tokenizer=tokenizer)
-    trainer.save_model(output_dir=output_dir)
+    model.save_pretrained(output_dir)
 
     src, dst = Path(model_dir.path), Path(output_dir)
     for file_name in [
