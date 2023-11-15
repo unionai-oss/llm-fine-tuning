@@ -57,14 +57,6 @@ SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:356633062068:secret:"
 WANDB_API_SECRET_KEY = "wandb_api_key-n5yPqE"
 HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-qwgGkT"
 
-# # Flyte Development Tenant
-# SECRET_GROUP = "arn:aws:secretsmanager:us-east-2:590375264460:secret:"
-# WANDB_API_SECRET_KEY = "wandb_api_key-5t1ZwJ"
-# HF_HUB_API_SECRET_KEY = "huggingface_hub_api_key-86cbXP"
-
-WANDB_API_KEY = "..."
-HF_API_TOKEN = "..."
-
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -384,7 +376,7 @@ finetuning_pod_template = flytekit.PodTemplate(
 
 @flytekit.task(
     requests=Resources(mem="8Gi", cpu="2", ephemeral_storage="8Gi"),
-    disable_deck=False,
+    enable_deck=True,
     cache=True,
     cache_version="0.0.0",
 )
@@ -404,24 +396,31 @@ def get_data(config: TrainerConfig) -> Annotated[StructuredDataset, PARQUET]:
 @flytekit.task(
     retries=3,
     cache=True,
-    cache_version="0.0.14",
+    cache_version="0.0.15",
     task_config=Elastic(
         nnodes=3,
         nproc_per_node=8,
-        rdzv_configs={"timeout": 3600, "join_timeout": 3600},
-        max_restarts=1,
+        rdzv_configs={"timeout": 36000, "join_timeout": 36000},
+        max_restarts=3,
     ),
-    requests=Resources(mem="256Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
+    requests=Resources(mem="100Gi", cpu="64", gpu="8", ephemeral_storage="100Gi"),
     pod_template=finetuning_pod_template,
     environment={
         "WANDB_PROJECT": "unionai-llm-fine-tuning",
         "TRANSFORMERS_CACHE": "/tmp",
-        # NOTE: secrets currently do not work with the Elastic plugin, use
-        # environment variable. Make sure you don't check this data into git!
-        # https://github.com/flyteorg/flyte/issues/3907 
-        "WANDB_API_KEY": WANDB_API_KEY,
-        "HF_API_TOKEN": HF_API_TOKEN,
     },
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=WANDB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+    ],
 )
 def train(
     config: TrainerConfig,
@@ -429,16 +428,29 @@ def train(
     deepspeed_config: Optional[dict] = None,
 ) -> flytekit.directory.FlyteDirectory:
     """Fine-tune a model on additional data."""
-    hf_auth_token = os.environ["HF_API_TOKEN"]
-    use_wandb = False
-    if "WANDB_API_KEY" in os.environ:
-        os.environ["WANDB_RUN_ID"] = os.environ.get("HOSTNAME", "localhost")
-        if config.wandb_project:
-            os.environ["WANDB_PROJECT"] = config.wandb_project
+
+    print("CUDA_VISIBLE_DEVICES", os.environ.get("CUDA_VISIBLE_DEVICES", None))
+
+    try:
+        os.environ["WANDB_API_KEY"] = flytekit.current_context().secrets.get(
+            SECRET_GROUP, WANDB_API_SECRET_KEY
+        )
         use_wandb = len(config.wandb_project) > 0 or (
             "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
         )
+        os.environ["WANDB_RUN_ID"] = os.environ.get("HOSTNAME", "localhost")
         wandb.init()
+    except Exception:
+        use_wandb = False
+
+    try:
+        hf_auth_token = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            HF_HUB_API_SECRET_KEY,
+        )
+        hh.login(token=hf_auth_token)
+    except Exception:
+        hf_auth_token = None
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     logging.info(f"WORLD_SIZE: {world_size}")
@@ -480,7 +492,6 @@ def train(
         torch_dtype=torch.float16,
         # `use_cache=True` does not work with gradient checkpointing.
         use_cache=False,
-        use_auth_token=hf_auth_token,
     )
     model.gradient_checkpointing_enable()
 
@@ -489,7 +500,6 @@ def train(
         model_max_length=config.model_max_length,
         padding_side="right",
         pad_token=DEFAULT_PAD_TOKEN,
-        use_auth_token=hf_auth_token,
     )
 
     # Try using fast version of the model's tokenizer, if available.
@@ -590,9 +600,13 @@ def train(
     cache=True,
     cache_version="0.0.3",
     requests=Resources(mem="256Gi", cpu="64", gpu="8", ephemeral_storage="200Gi"),
-    environment={
-        "HF_API_TOKEN": HF_API_TOKEN,
-    },
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+    ],
 )
 def quantize_model(
     config: TrainerConfig,
@@ -600,7 +614,16 @@ def quantize_model(
 ) -> flytekit.directory.FlyteDirectory:
     model_dir.download()
 
-    hf_auth_token = os.environ["HF_API_TOKEN"]
+    try:
+        hf_auth_token = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            HF_HUB_API_SECRET_KEY,
+        )
+    except Exception:
+        hf_auth_token = None
+
+    hh.login(token=hf_auth_token)
+
     device_map = config.device_map
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
@@ -614,20 +637,9 @@ def quantize_model(
         cache_dir=config.cache_dir,
         load_in_8bit=True,
         device_map=device_map,
-        use_auth_token=hf_auth_token,
-    )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        config.base_model,
-        use_fast=True,
-        cache_dir=config.cache_dir,
-        model_max_length=config.model_max_length,
-        padding_side="right",
-        pad_token=DEFAULT_PAD_TOKEN,
-        use_auth_token=hf_auth_token,
     )
     output_dir = "/tmp"
-    trainer = Trainer(model=model, tokenizer=tokenizer)
-    trainer.save_model(output_dir=output_dir)
+    model.save_pretrained(output_dir)
 
     src, dst = Path(model_dir.path), Path(output_dir)
     for file_name in [
@@ -652,9 +664,13 @@ MODEL_CARD_TEMPLATE = """
     cache=True,
     cache_version="0.0.4",
     requests=Resources(mem="10Gi", cpu="1", ephemeral_storage="200Gi"),
-    environment={
-        "HF_API_TOKEN": HF_API_TOKEN,
-    },
+    secret_requests=[
+        Secret(
+            group=SECRET_GROUP,
+            key=HF_HUB_API_SECRET_KEY,
+            mount_requirement=Secret.MountType.FILE,
+        ),
+    ],
 )
 def save_to_hf_hub(
     model_dir: flytekit.directory.FlyteDirectory,
@@ -666,7 +682,15 @@ def save_to_hf_hub(
 
     model_dir.download()
     root = Path(model_dir.path)
-    hf_auth_token = os.environ["HF_API_TOKEN"]
+
+    try:
+        hf_auth_token = flytekit.current_context().secrets.get(
+            SECRET_GROUP,
+            HF_HUB_API_SECRET_KEY,
+        )
+    except Exception:
+        hf_auth_token = None
+
     hh.login(token=hf_auth_token)
     api = hh.HfApi()
     if quantized_8bit:
