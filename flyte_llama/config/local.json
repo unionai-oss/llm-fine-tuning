@@ -3,7 +3,7 @@
     "output_dir": "~/models/flyte_llama",
     "checkpoint_dir": null,
     "num_epochs": 1,
-    "max_steps": 20,
+    "max_steps": 3,
     "batch_size": 1,
     "test_size": 0.001,
     "model_max_length": 512,

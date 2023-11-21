@@ -21,7 +21,6 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
-export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:2b857ea
 ```
 
 ### 🐳 Container Build
@@ -74,7 +73,7 @@ pyflyte run --remote \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
-    --config config/flyte_llama_7b_qlora_v0.json
+    --config config/local.json
 ```
 
 **Publish:**
@@ -84,7 +83,7 @@ pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
     --image $IMAGE \
-    flyte_llama/workflows.py publish_model_workflow \
+    flyte_llama/workflows.py publish_model \
     --config config/flyte_llama_7b_qlora_v0.json \
     --model_dir s3://path/to/model
 ```
@@ -351,3 +350,36 @@ to generate the examples (this is somewhat what a human does to generate code ex
 - [Causal Masked Multimodal Model paper](https://arxiv.org/abs/2201.07520)
 - [Fill in the Middle paper](https://arxiv.org/abs/2207.14255)
 - [LLM Vscode](https://github.com/huggingface/llm-vscode)
+
+
+## 🔧 Resource Tuning
+
+<details>
+<summary>Local</summary>
+<p>
+
+**Run:**
+
+```bash
+pyflyte run flyte_llama/workflows.py tune_batch_size \
+    --config config/local.json \
+    --batch_sizes '[2, 4]'
+```
+
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 7b Qlora</summary>
+<p>
+
+**Run:**
+
+```bash
+pyflyte run flyte_llama/workflows.py tune_batch_size \
+    --config config/flyte_llama_7b_qlora_v0.json \
+    --batch_sizes '[4, 8, 16, 32]'
+```
+
+</p>
+</details>
