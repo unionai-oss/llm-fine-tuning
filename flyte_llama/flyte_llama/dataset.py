@@ -16,7 +16,7 @@ from git import Repo
 
 DEFAULT_EXTENSIONS = [
     ".py", ".md", ".rst", ".go", ".yaml", ".yml", ".json", ".js", ".tsx", ".ts",
-    ".sh", ".txt", ".proto",
+    ".sh", ".txt", ".proto", ".dockerfile",
 ]
 DEFAULT_INCLUDE_FILES = [
     "Dockerfile",
@@ -31,7 +31,13 @@ REPO_URLS = [
     f"{ROOT_URL}flyteorg/flyteadmin",
     f"{ROOT_URL}flyteorg/flyteconsole",
     f"{ROOT_URL}flyteorg/flytesnacks",
+]
+
+UNIONAIOSS_URLS = [
     f"{ROOT_URL}flyteorg/flyte-conference-talks",
+    f"{ROOT_URL}unionai-oss/llm-fine-tuning",
+    f"{ROOT_URL}unionai-oss/variant-discovery",
+    f"{ROOT_URL}unionai-oss/workshops",
 ]
 
 

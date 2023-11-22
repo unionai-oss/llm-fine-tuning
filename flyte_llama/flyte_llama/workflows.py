@@ -34,8 +34,11 @@ image_spec = ImageSpec(
     container_image=image_spec,
     requests=Resources(mem="8Gi", cpu="2", ephemeral_storage="8Gi"),
 )
-def create_dataset(additional_urls: Optional[List[str]] = None) -> FlyteDirectory:
-    urls = [*flyte_llama.dataset.REPO_URLS, *(additional_urls or [])]
+def create_dataset(additional_urls: Optional[List[str]] = None, use_unionaioss_datasets: bool = False) -> FlyteDirectory:
+    if use_unionaioss_datasets:
+        urls = [*flyte_llama.dataset.REPO_URLS, *flyte_llama.dataset.UNIONAIOSS_URLS, *(additional_urls or [])]
+    else:
+        urls = [*flyte_llama.dataset.REPO_URLS, *(additional_urls or [])]
 
     ctx = current_context()
     working_dir = Path(ctx.working_directory)
