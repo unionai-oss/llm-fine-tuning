@@ -131,12 +131,19 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--output-path", type=str, required=True, default="~/datasets/flyte_llama")
+    parser.add_argument("--unionaioss", action="store_true", required=False, default=False)
     args = parser.parse_args()
 
     output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
+    urls = []
+    if args.unionaioss:
+        urls.extend(UNIONAIOSS_URLS)
+        urls.extend(REPO_URLS)
+    else:
+        urls.extend(REPO_URLS)
     create_dataset(
-        REPO_URLS,
+        urls,
         output_path,
         Path("/tmp/flyte_llama_github"),
     )
