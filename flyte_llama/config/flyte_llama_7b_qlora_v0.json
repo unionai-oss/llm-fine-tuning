@@ -6,7 +6,7 @@
     "batch_size": 8,
     "test_size": 0.001,
     "model_max_length": 1024,
-    "max_steps": 30,
+    "max_steps": 3,
     "seed": 41,
     "report_to": "wandb",
     "device_map": "auto",

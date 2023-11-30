@@ -11,7 +11,7 @@ pyyaml
 sentencepiece
 tokenizers
 transformers
-torch==2.0.1
+torch==2.1.1
 wandb
 flytekit==1.10.0
 flytekitplugins-envd==1.10.0

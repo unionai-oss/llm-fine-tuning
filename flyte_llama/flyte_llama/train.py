@@ -151,7 +151,7 @@ def train(
             model = get_peft_model(model, lora_config)
 
         print("LORA Config:")
-        print(json.dumps(asdict(lora_config), indent=4))
+        print(lora_config)
         model.print_trainable_parameters()
 
     def tokenize(examples):

@@ -23,20 +23,6 @@ export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
 ```
 
-### 🐳 Container Build
-
-This repository comes with a pre-built image for running the fine-tuning workflows,
-but if you want to build your own, follow these instructions to build an image
-with `transformers` and `deepspeed` pre-built.
-
-```bash
-docker login ghcr.io
-gitsha=$(git rev-parse --short=7 HEAD)
-image_name=$REGISTRY/unionai-flyte-llama
-docker build . -t $image_name:$gitsha -f Dockerfile
-docker push $image_name:$gitsha
-```
-
 ### Create dataset
 
 ```bash
@@ -51,10 +37,9 @@ python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
 <p>
 
 ```bash
-python flyte_llama/train.py \
-    --model_path codellama/CodeLlama-7b-hf \
-    --data_dir=~/datasets/flyte_llama \
-    --output_dir=~/models/flyte_llama
+pyflyte run flyte_llama/workflows.py train \
+    --dataset ~/datasets/flyte_llama \
+    --config config/local.json
 ```
 
 </p>
@@ -68,12 +53,11 @@ python flyte_llama/train.py \
 **Train:**
 
 ```bash
-pyflyte run --remote \
+pyflyte -c $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
-    --config config/local.json
+    --config config/flyte_llama_7b_qlora_v0.json
 ```
 
 **Publish:**
@@ -82,7 +66,6 @@ pyflyte run --remote \
 pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
     flyte_llama/workflows.py publish_model \
     --config config/flyte_llama_7b_qlora_v0.json \
     --model_dir s3://path/to/model
@@ -103,7 +86,6 @@ adapter checkpoint. This is typically an s3 path produced by `train_workflow`.
 pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json \
     --pretrained_adapter s3://path/to/checkpoint
