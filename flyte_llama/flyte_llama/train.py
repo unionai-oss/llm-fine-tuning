@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import torch
-from dataclasses_json import dataclass_json
+from dataclasses_json import dataclass_json, DataClassJsonMixin
 
 import transformers
 from peft import (
@@ -28,32 +28,25 @@ from transformers import (
 from flyte_llama.dataloader import get_dataset
 
 
-os.environ["WANDB_PROJECT"] = "unionai-flyte-llama"
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
-
-
 transformers.logging.set_verbosity_debug()
 
 
-@dataclass_json
 @dataclass
-class HuggingFaceModelCard:
+class HuggingFaceModelCard(DataClassJsonMixin):
     language: List[str]
     license: str  # valid licenses can be found at https://hf.co/docs/hub/repositories-licenses
     tags: List[str]
 
 
-@dataclass_json
 @dataclass
-class PublishConfig:
+class PublishConfig(DataClassJsonMixin):
     repo_id: str
     readme: Optional[str] = None
     model_card: Optional[HuggingFaceModelCard] = None
 
 
-@dataclass_json
 @dataclass
-class TrainerConfig:
+class TrainerConfig(DataClassJsonMixin):
     model_path: str = "codellama/CodeLlama-7b-hf"
     data_dir: str = "./data"
     output_dir: str = "./output"
@@ -74,7 +67,7 @@ class TrainerConfig:
     use_qlora: bool = False
     lora_r: int = 8
     lora_alpha: int = 16
-    lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "k_proj", "v_proj"])
+    lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "k_proj"])
     lora_dropout: float = 0.05
     debug: bool = False
     publish_config: Optional[PublishConfig] = field(default=None)
@@ -158,7 +151,7 @@ def train(
             model = get_peft_model(model, lora_config)
 
         print("LORA Config:")
-        print(json.dumps(asdict(lora_config), indent=4))
+        print(lora_config)
         model.print_trainable_parameters()
 
     def tokenize(examples):

@@ -21,21 +21,6 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 export FLYTECTL_CONFIG=~/.uctl/config-demo.yaml  # replace with your flyte/union cloud config
 export REGISTRY=ghcr.io/unionai-oss  # replace this with your own registry
 export FLYTE_PROJECT=llm-fine-tuning
-export IMAGE=ghcr.io/unionai-oss/unionai-flyte-llama:2b857ea
-```
-
-### 🐳 Container Build
-
-This repository comes with a pre-built image for running the fine-tuning workflows,
-but if you want to build your own, follow these instructions to build an image
-with `transformers` and `deepspeed` pre-built.
-
-```bash
-docker login ghcr.io
-gitsha=$(git rev-parse --short=7 HEAD)
-image_name=$REGISTRY/unionai-flyte-llama
-docker build . -t $image_name:$gitsha -f Dockerfile
-docker push $image_name:$gitsha
 ```
 
 ### Create dataset
@@ -52,10 +37,9 @@ python flyte_llama/dataset.py --output-path ~/datasets/flyte_llama
 <p>
 
 ```bash
-python flyte_llama/train.py \
-    --model_path codellama/CodeLlama-7b-hf \
-    --data_dir=~/datasets/flyte_llama \
-    --output_dir=~/models/flyte_llama
+pyflyte run flyte_llama/workflows.py train \
+    --dataset ~/datasets/flyte_llama \
+    --config config/local.json
 ```
 
 </p>
@@ -69,10 +53,9 @@ python flyte_llama/train.py \
 **Train:**
 
 ```bash
-pyflyte run --remote \
+pyflyte -c $FLYTECTL_CONFIG run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json
 ```
@@ -83,8 +66,7 @@ pyflyte run --remote \
 pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
-    flyte_llama/workflows.py publish_model_workflow \
+    flyte_llama/workflows.py publish_model \
     --config config/flyte_llama_7b_qlora_v0.json \
     --model_dir s3://path/to/model
 ```
@@ -104,7 +86,6 @@ adapter checkpoint. This is typically an s3 path produced by `train_workflow`.
 pyflyte run --remote \
     --copy-all \
     --project $FLYTE_PROJECT \
-    --image $IMAGE \
     flyte_llama/workflows.py train_workflow \
     --config config/flyte_llama_7b_qlora_v0.json \
     --pretrained_adapter s3://path/to/checkpoint
@@ -351,3 +332,36 @@ to generate the examples (this is somewhat what a human does to generate code ex
 - [Causal Masked Multimodal Model paper](https://arxiv.org/abs/2201.07520)
 - [Fill in the Middle paper](https://arxiv.org/abs/2207.14255)
 - [LLM Vscode](https://github.com/huggingface/llm-vscode)
+
+
+## 🔧 Resource Tuning
+
+<details>
+<summary>Local</summary>
+<p>
+
+**Run:**
+
+```bash
+pyflyte run flyte_llama/workflows.py tune_batch_size \
+    --config config/local.json \
+    --batch_sizes '[2, 4]'
+```
+
+</p>
+</details>
+
+<details>
+<summary>Flyte Llama 7b Qlora</summary>
+<p>
+
+**Run:**
+
+```bash
+pyflyte run flyte_llama/workflows.py tune_batch_size \
+    --config config/flyte_llama_7b_qlora_v0.json \
+    --batch_sizes '[4, 8, 16, 32]'
+```
+
+</p>
+</details>

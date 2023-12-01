@@ -2,7 +2,7 @@
 with docker:
 
 ```
-docker build . -f Dockerfile.server -t ghcr.io/unionai-oss/modelz-flyte-llama-serving:v13
+docker build . -f Dockerfile.server_sse -t ghcr.io/unionai-oss/modelz-flyte-llama-serving:<version>
 ```
 
 with envd:
@@ -79,7 +79,7 @@ def load_tokenizer_and_model(config):
         }
 
     model = AutoModelForCausalLM.from_pretrained(
-        config.adapter_path,
+        config.adapter_path or config.model_path,
         **load_model_params,
     )
 

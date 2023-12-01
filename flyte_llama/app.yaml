@@ -1,0 +1,10 @@
+clientId: eager-workflows
+clientName: Eager Workflows Operator
+grantTypes:
+- CLIENT_CREDENTIALS
+- AUTHORIZATION_CODE
+redirectUris:
+- http://localhost:8080/authorization-code/callback
+responseTypes:
+- CODE
+tokenEndpointAuthMethod: CLIENT_SECRET_BASIC
